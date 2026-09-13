@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "physical_damage",
+      "expression": "base + strength * scaling"
+    },
+    {
+      "id": "magic_damage",
+      "expression": "base + wisdom * scaling"
+    }
+  ]
+}

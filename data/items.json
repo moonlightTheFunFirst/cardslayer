@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "sword",
+      "name": "旅人の剣",
+      "slot": "weapon",
+      "bonuses": {
+        "strength": 2
+      },
+      "requirements": {},
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    },
+    {
+      "id": "staff",
+      "name": "灰木の杖",
+      "slot": "weapon",
+      "bonuses": {
+        "wisdom": 2
+      },
+      "requirements": {},
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    },
+    {
+      "id": "vest",
+      "name": "革の胴衣",
+      "slot": "armor",
+      "bonuses": {
+        "max_hp": 8
+      },
+      "requirements": {},
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    },
+    {
+      "id": "robe",
+      "name": "修練の衣",
+      "slot": "armor",
+      "bonuses": {
+        "max_mp": 3
+      },
+      "requirements": {},
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    },
+    {
+      "id": "ring",
+      "name": "力の指輪",
+      "slot": "accessory",
+      "bonuses": {
+        "strength": 1
+      },
+      "requirements": {
+        "strength": 5
+      },
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    },
+    {
+      "id": "charm",
+      "name": "灯火のお守り",
+      "slot": "accessory",
+      "bonuses": {
+        "wisdom": 1,
+        "max_hp": 3
+      },
+      "requirements": {
+        "wisdom": 5
+      },
+      "level": 1,
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage"
+      ]
+    }
+  ]
+}

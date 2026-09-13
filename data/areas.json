@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "forest",
+      "name": "朽ち森",
+      "start": "start",
+      "boss": "boss",
+      "nodes": [
+        {
+          "id": "start",
+          "enemies": [],
+          "next": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "id": "a",
+          "enemies": [
+            "mossling"
+          ],
+          "next": [
+            "c"
+          ]
+        },
+        {
+          "id": "b",
+          "enemies": [
+            "wisp"
+          ],
+          "next": [
+            "c"
+          ]
+        },
+        {
+          "id": "c",
+          "enemies": [
+            "thorn",
+            "mossling"
+          ],
+          "next": [
+            "boss"
+          ]
+        },
+        {
+          "id": "boss",
+          "enemies": [
+            "warden"
+          ],
+          "next": []
+        }
+      ]
+    }
+  ]
+}

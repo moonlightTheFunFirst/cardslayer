@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "strike",
+      "name": "斬撃",
+      "ap": 1,
+      "mp": 0,
+      "target": "selected_enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "value": 6,
+          "target": "selected_enemy",
+          "formula_id": "physical_damage",
+          "scaling": 0.5,
+          "stat": "strength"
+        }
+      ],
+      "description": "力を乗せた一撃。",
+      "category": "attack",
+      "image_path": ""
+    },
+    {
+      "id": "guard",
+      "name": "防御",
+      "ap": 1,
+      "mp": 0,
+      "target": "self",
+      "effects": [
+        {
+          "type": "block",
+          "value": 8,
+          "target": "self",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "ブロックを8得る。",
+      "category": "support",
+      "image_path": ""
+    },
+    {
+      "id": "heavy_strike",
+      "name": "強打",
+      "ap": 2,
+      "mp": 0,
+      "target": "selected_enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "value": 14,
+          "target": "selected_enemy",
+          "formula_id": "physical_damage",
+          "scaling": 1,
+          "stat": "strength"
+        }
+      ],
+      "description": "重い一撃を叩き込む。",
+      "category": "attack",
+      "image_path": ""
+    },
+    {
+      "id": "fireball",
+      "name": "火球",
+      "ap": 1,
+      "mp": 3,
+      "target": "selected_enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "value": 10,
+          "target": "selected_enemy",
+          "formula_id": "magic_damage",
+          "scaling": 0.8,
+          "stat": "strength"
+        }
+      ],
+      "description": "知恵に応じた魔法攻撃。",
+      "category": "attack",
+      "image_path": ""
+    },
+    {
+      "id": "sweep",
+      "name": "薙ぎ払い",
+      "ap": 2,
+      "mp": 0,
+      "target": "all_enemies",
+      "effects": [
+        {
+          "type": "damage",
+          "value": 5,
+          "target": "all_enemies",
+          "formula_id": "physical_damage",
+          "scaling": 0.4,
+          "stat": "strength"
+        }
+      ],
+      "description": "生存する敵全体を攻撃。",
+      "category": "attack",
+      "image_path": ""
+    },
+    {
+      "id": "insight",
+      "name": "洞察",
+      "ap": 1,
+      "mp": 0,
+      "target": "self",
+      "effects": [
+        {
+          "type": "draw",
+          "value": 2,
+          "target": "self",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "山札から2枚引く。",
+      "category": "support",
+      "image_path": ""
+    },
+    {
+      "id": "heal",
+      "name": "癒し",
+      "ap": 1,
+      "mp": 4,
+      "target": "self",
+      "effects": [
+        {
+          "type": "heal",
+          "value": 10,
+          "target": "self",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "HPを10回復。",
+      "category": "support",
+      "image_path": ""
+    },
+    {
+      "id": "focus",
+      "name": "精神集中",
+      "ap": 1,
+      "mp": 0,
+      "target": "self",
+      "effects": [
+        {
+          "type": "restore_mp",
+          "value": 4,
+          "target": "self",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "MPを4回復。",
+      "category": "support",
+      "image_path": ""
+    },
+    {
+      "id": "poison_stab",
+      "name": "毒の刃",
+      "ap": 1,
+      "mp": 0,
+      "target": "selected_enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "value": 3,
+          "target": "selected_enemy",
+          "formula_id": "physical_damage",
+          "scaling": 0.3,
+          "stat": "strength"
+        },
+        {
+          "type": "apply_poison",
+          "value": 3,
+          "target": "selected_enemy",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "ダメージを与え、生存していれば毒3。",
+      "category": "attack",
+      "image_path": ""
+    },
+    {
+      "id": "battle_cry",
+      "name": "戦意",
+      "ap": 1,
+      "mp": 0,
+      "target": "self",
+      "effects": [
+        {
+          "type": "modify_stat",
+          "value": 2,
+          "target": "self",
+          "formula_id": "",
+          "scaling": 0,
+          "stat": "strength"
+        }
+      ],
+      "description": "戦闘中、力を2増やす。",
+      "category": "buff",
+      "image_path": ""
+    }
+  ]
+}

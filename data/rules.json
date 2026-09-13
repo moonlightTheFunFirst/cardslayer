@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "combat",
+      "ap": 3,
+      "initial_hand": 5,
+      "draw": 1,
+      "hand_limit": 10,
+      "mp_regen": 2,
+      "starter_deck": [
+        "strike",
+        "strike",
+        "strike",
+        "strike",
+        "strike",
+        "strike",
+        "guard",
+        "guard",
+        "guard",
+        "guard",
+        "guard",
+        "guard",
+        "heavy_strike",
+        "fireball",
+        "sweep",
+        "insight",
+        "heal",
+        "focus",
+        "poison_stab",
+        "battle_cry"
+      ],
+      "loot_bases": [
+        "sword",
+        "staff",
+        "vest",
+        "robe",
+        "ring",
+        "charm"
+      ],
+      "rarity_weights": {
+        "common": 70,
+        "magic": 25,
+        "rare": 5
+      }
+    }
+  ]
+}

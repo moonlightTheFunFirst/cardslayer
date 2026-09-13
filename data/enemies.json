@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "mossling",
+      "name": "苔の小鬼",
+      "hp": 20,
+      "strength": 2,
+      "wisdom": 2,
+      "xp": 12,
+      "gold": 8,
+      "actions": [
+        {
+          "name": "ひっかく",
+          "effects": [
+            {
+              "type": "damage",
+              "value": 3,
+              "target": "player",
+              "formula_id": "physical_damage",
+              "scaling": 0.5,
+              "stat": "strength"
+            }
+          ]
+        },
+        {
+          "name": "身を守る",
+          "effects": [
+            {
+              "type": "block",
+              "value": 4,
+              "target": "self",
+              "formula_id": "",
+              "scaling": 0,
+              "stat": "strength"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thorn",
+      "name": "棘の獣",
+      "hp": 24,
+      "strength": 3,
+      "wisdom": 3,
+      "xp": 15,
+      "gold": 10,
+      "actions": [
+        {
+          "name": "突進",
+          "effects": [
+            {
+              "type": "damage",
+              "value": 4,
+              "target": "player",
+              "formula_id": "physical_damage",
+              "scaling": 0.5,
+              "stat": "strength"
+            }
+          ]
+        },
+        {
+          "name": "毒の棘",
+          "effects": [
+            {
+              "type": "apply_poison",
+              "value": 2,
+              "target": "player",
+              "formula_id": "",
+              "scaling": 0,
+              "stat": "strength"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wisp",
+      "name": "灯火の霊",
+      "hp": 18,
+      "strength": 2,
+      "wisdom": 2,
+      "xp": 14,
+      "gold": 9,
+      "actions": [
+        {
+          "name": "火花",
+          "effects": [
+            {
+              "type": "damage",
+              "value": 3,
+              "target": "player",
+              "formula_id": "magic_damage",
+              "scaling": 0.5,
+              "stat": "strength"
+            }
+          ]
+        },
+        {
+          "name": "蓄火",
+          "effects": [
+            {
+              "type": "modify_stat",
+              "value": 1,
+              "target": "self",
+              "formula_id": "",
+              "scaling": 0,
+              "stat": "wisdom"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "warden",
+      "name": "朽ち森の守護者",
+      "hp": 65,
+      "strength": 5,
+      "wisdom": 5,
+      "xp": 40,
+      "gold": 30,
+      "actions": [
+        {
+          "name": "枝の鉄槌",
+          "effects": [
+            {
+              "type": "damage",
+              "value": 6,
+              "target": "player",
+              "formula_id": "physical_damage",
+              "scaling": 0.5,
+              "stat": "strength"
+            }
+          ]
+        },
+        {
+          "name": "樹皮",
+          "effects": [
+            {
+              "type": "block",
+              "value": 7,
+              "target": "self",
+              "formula_id": "",
+              "scaling": 0,
+              "stat": "strength"
+            }
+          ]
+        },
+        {
+          "name": "腐蝕",
+          "effects": [
+            {
+              "type": "damage",
+              "value": 4,
+              "target": "player",
+              "formula_id": "physical_damage",
+              "scaling": 0.5,
+              "stat": "strength"
+            },
+            {
+              "type": "apply_poison",
+              "value": 2,
+              "target": "player",
+              "formula_id": "",
+              "scaling": 0,
+              "stat": "strength"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
