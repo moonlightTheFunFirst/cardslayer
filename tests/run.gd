@@ -63,6 +63,7 @@ func run() -> void:
 	if defs.is_empty():
 		quit(1)
 		return
+	check_generator()
 	var b := fresh()
 	expect(b.hand.size() == 5 and b.deck.size() == 15 and b.turn == 1, "initial five, no extra first draw")
 	var held := b.hand.duplicate()
@@ -153,7 +154,7 @@ func run() -> void:
 	saves.path = "res://.godot/tests/profile.json"
 	expect(saves.save(profile, defs), "save succeeds: " + saves.error)
 	var loaded := saves.read_profile(defs)
-	expect(not loaded.is_empty() and JSON.stringify(loaded.inventory) == JSON.stringify(profile.inventory), "rolled item values survive load")
+	expect(not loaded.is_empty() and JSON.stringify(loaded.inventory) == JSON.stringify(profile.inventory), "rolled item values survive load: " + saves.error)
 	var original := FileAccess.get_file_as_string(saves.path)
 	var corrupt := FileAccess.open(saves.path, FileAccess.WRITE)
 	corrupt.store_string("{broken")
@@ -190,6 +191,19 @@ func run() -> void:
 	var disk_before := FileAccess.get_file_as_string(main.saves.path)
 	main.open_editor()
 	await process_frame
+	main.editor.group = "generator"
+	main.editor.refresh()
+	var save_before_generator := FileAccess.get_file_as_string(main.saves.path)
+	var generated_panel: GeneratorPanel = main.editor.generator_panel
+	generated_panel.filter_rarity = "rare"
+	generated_panel.amount = 5
+	expect(generated_panel.generate_items(false) and generated_panel.results.size() == 5, "generator UI produces requested batch")
+	expect(FileAccess.get_file_as_string(main.saves.path) == save_before_generator, "preview generator never writes normal save")
+	generated_panel.section = "rarity"
+	generated_panel.refresh()
+	main.editor.group = "cards"
+	main.editor.selected_id = "strike"
+	main.editor.refresh()
 	# Isolate editor writes from authored sample files.
 	main.repository.root = "res://.godot/tests/editor_data"
 	DirAccess.make_dir_recursive_absolute(main.repository.root)
@@ -239,3 +253,130 @@ func run() -> void:
 	await process_frame
 	print("CHECKS: %d; FAILURES: %d" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
+
+func check_generator() -> void:
+	var generator := EquipmentGenerator.new(defs)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9123
+	for rarity: String in EquipmentGenerator.RARITIES:
+		var valid: bool = true
+		for i: int in 200:
+			var item: Dictionary = generator.generate(rng, 10, rarity).item
+			valid = valid and item.affixes.size() in EquipmentGenerator.COUNTS[rarity]
+			var ids: Dictionary = {}
+			for affix: Dictionary in item.affixes:
+				ids[affix.id] = true
+			valid = valid and ids.size() == item.affixes.size()
+		expect(valid, "generator count range and no duplicate affixes: " + rarity)
+	for slot: String in EquipmentGenerator.SLOTS:
+		var item: Dictionary = generator.generate(rng, 1, "common", "", slot).item
+		expect(generator.bases[item.base_id].slot == slot, "generator slot filter: " + slot)
+	var a := RandomNumberGenerator.new()
+	var b := RandomNumberGenerator.new()
+	a.seed = 1234
+	b.seed = 1234
+	expect(generator.generate(a, 15) == generator.generate(b, 15), "generator same seed is reproducible")
+	var one: Dictionary = generator.generate(rng, 1, "rare", "sword").item
+	expect(one.has("name") and not str(one.name).is_empty(), "generated items have a random name")
+	var has_left: bool = false
+	var has_link: bool = false
+	var has_right: bool = false
+	for part: String in EquipmentGenerator.NAME_LEFT:
+		has_left = has_left or one.name.begins_with(part)
+	for part: String in EquipmentGenerator.NAME_LINKS:
+		has_link = has_link or part in one.name
+	for part: String in EquipmentGenerator.NAME_RIGHT.right_hand:
+		has_right = has_right or one.name.ends_with(part)
+	expect(has_left and has_link and has_right, "equipment names combine left name, linking phrase and slot-appropriate right name")
+	var eleven: Dictionary = generator.generate(rng, 11, "rare", "sword").item
+	expect(one.base_bonuses.strength == 2 and eleven.base_bonuses.strength == 6, "level growth applies to rolled base stats")
+	expect(not generator.generate(rng, 0).ok and not generator.generate(rng, 1, "invalid").ok and not generator.generate(rng, 1, "common", "sword", "feet").ok, "invalid generator requests rejected")
+	var policies: Dictionary = repo.indexed("rules", defs).loot
+	var forced := defs.duplicate(true)
+	var forced_policies: Array = repo.indexed("rules", forced).loot.rarities
+	for policy: Dictionary in forced_policies:
+		if policy.id == "rare":
+			policy.count_weights = {"7": 100}
+		if policy.id == "common":
+			for id: String in policy.value_ranges:
+				policy.value_ranges[id].exception_chance = 100
+		if policy.id == "magic":
+			policy.count_weights = {"1": 100}
+			for id: String in policy.affix_weights:
+				policy.affix_weights[id] = 1 if id == "blue_star" else 0
+	expect(repo.validate(forced).is_empty(), "forced boundary distributions validate")
+	var forced_generator := EquipmentGenerator.new(forced)
+	expect(forced_generator.generate(rng, 1, "rare").item.affixes.size() == 7, "editable weights can force seven affixes")
+	var exceptional: Dictionary = forced_generator.generate(rng, 1, "common").item.affixes[0]
+	expect(exceptional.exceptional and exceptional.value > generator.rarities.rare.value_ranges[exceptional.id].max, "common exceptional roll can exceed rare maximum")
+	expect(forced_generator.generate(rng, 1, "magic").item.affixes[0].id == "blue_star", "magic-only affix can be enabled by rarity weight")
+	var forbidden_seen: bool = false
+	var high_counts: int = 0
+	var rare_count: int = 0
+	rng.seed = 556677
+	for i: int in 10000:
+		var item: Dictionary = generator.generate(rng, 1, "rare").item
+		if item.affixes.size() >= 6:
+			high_counts += 1
+		for affix: Dictionary in item.affixes:
+			forbidden_seen = forbidden_seen or affix.id == "blue_star"
+		if item.rarity == "rare":
+			rare_count += 1
+	expect(not forbidden_seen, "zero-weight magic-only affix never appears on rare")
+	expect(high_counts > 0 and high_counts < 50 and rare_count == 10000, "six/seven affixes are exceptionally rare for fixed sample seed")
+	print("Rare six/seven affixes: %d/10000" % high_counts)
+	var invalid := defs.duplicate(true)
+	repo.indexed("rules", invalid).loot.rarities[0].count_weights = {"2": 100}
+	expect(not repo.validate(invalid).is_empty(), "common two-affix configuration rejected")
+	invalid = defs.duplicate(true)
+	repo.indexed("rules", invalid).loot.rarities[2].affix_weights = {"vital": 100}
+	expect(not repo.validate(invalid).is_empty(), "insufficient distinct affix candidates rejected")
+	invalid = defs.duplicate(true)
+	repo.indexed("rules", invalid).loot.rarities[0].value_ranges.vital.min = 999
+	expect(not repo.validate(invalid).is_empty(), "inverted generator value range rejected")
+	var profile := Progression.new_player(defs)
+	profile.level = 20
+	var right: Dictionary = generator.generate(rng, 1, "common", "sword").item
+	var left: Dictionary = generator.generate(rng, 1, "common", "shield").item
+	var both: Dictionary = generator.generate(rng, 1, "common", "staff").item
+	right.instance_id = "right"
+	left.instance_id = "left"
+	both.instance_id = "both"
+	profile.inventory = [right, left, both]
+	Progression.equip(profile, right, defs)
+	Progression.equip(profile, left, defs)
+	expect(profile.equipped.size() == 2, "independent right and left slots")
+	Progression.equip(profile, both, defs)
+	expect(profile.equipped == {"two_handed": "both"}, "two-handed item replaces both hands")
+	Progression.equip(profile, left, defs)
+	expect(profile.equipped == {"left_hand": "left"}, "one-handed item removes two-handed item")
+	profile.equipped.two_handed = "both"
+	expect(not SaveRepository.new().validate(profile, defs).is_empty(), "invalid simultaneous hand equipment rejected on load")
+	var legacy := Progression.new_player(defs)
+	legacy.save_version = 1
+	legacy.inventory = [{"instance_id": "old", "base_id": "staff", "rarity": "common", "affixes": []}]
+	legacy.equipped = {"weapon": "old"}
+	var saver := SaveRepository.new()
+	var migrated := saver.migrate(legacy, defs)
+	expect(migrated.ok and saver.validate(migrated.profile, defs).is_empty() and migrated.profile.equipped == {"two_handed": "old"} and migrated.profile.inventory[0].affixes.is_empty(), "old save migrates slots without rerolling existing equipment")
+	expect(legacy.save_version == 1 and legacy.equipped == {"weapon": "old"}, "migration preserves original input")
+	saver.path = "res://.godot/tests/legacy-profile.json"
+	var file := FileAccess.open(saver.path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(legacy))
+	file.close()
+	var old_file := FileAccess.get_file_as_string(saver.path)
+	var loaded := saver.read_profile(defs)
+	expect(not loaded.is_empty() and loaded.save_version == 2 and loaded.inventory[0].affixes.is_empty() and FileAccess.get_file_as_string(saver.path) == old_file, "legacy file loads without overwriting or rerolling")
+	var upgrade := DefinitionRepository.new()
+	upgrade.root = "res://.godot/tests/legacy_data"
+	DirAccess.make_dir_recursive_absolute(upgrade.root)
+	for group: String in DefinitionRepository.GROUPS:
+		var document: Dictionary = defs[group].duplicate(true)
+		if group == "rules":
+			document.entries.pop_back()
+		file = FileAccess.open(upgrade.root + "/" + group + ".json", FileAccess.WRITE)
+		file.store_string(JSON.stringify(document))
+		file.close()
+	expect(not upgrade.reload(), "old definition set is not silently mixed with new defaults")
+	expect(upgrade.install_bundled() and FileAccess.file_exists(upgrade.last_backup_path + "/rules.json"), "explicit definition update preserves a durable backup")
+	expect(EquipmentGenerator.COLORS.size() == 5 and policies.rarities.size() == 5, "five rarity colors and policies")

@@ -2,6 +2,8 @@ class_name UiText
 extends RefCounted
 
 const NAMES: Dictionary = {
+	"head": "頭（兜）", "body": "胴（鎧）", "arms": "腕（籠手）", "right_hand": "武器（右）", "left_hand": "武器・盾（左）", "two_handed": "両手武器（左右）", "feet": "足（ブーツ）",
+	"legendary": "レジェンダリー", "unique": "ユニーク", "level_growth": "1レベルごとの成長", "count_weights": "個数の抽選重み", "affix_weights": "候補ごとの抽選重み", "value_ranges": "等級ごとの数値範囲", "rarities": "等級設定", "exception_chance": "特別ロール確率（%）", "exception_min": "特別ロール最小値", "exception_max": "特別ロール最大値",
 	"damage": "ダメージ", "block": "ブロック", "heal": "HP回復", "draw": "ドロー", "restore_mp": "MP回復", "apply_poison": "毒付与", "modify_stat": "能力強化",
 	"self": "自分", "player": "英雄", "selected_enemy": "選択した敵", "all_enemies": "敵全体",
 	"weapon": "武器", "armor": "防具", "accessory": "装飾品", "common": "コモン", "magic": "マジック", "rare": "レア",

@@ -15,6 +15,8 @@ var status: Label
 var search: String = ""
 var saved_scroll: int = 0
 var test_settings: Dictionary = {}
+var generator_panel: GeneratorPanel
+var record_buttons: Array[Button] = []
 
 func setup(repo: DefinitionRepository) -> void:
 	repository = repo
@@ -50,23 +52,24 @@ func build() -> void:
 	add_child(toolbar)
 	button_at(toolbar, "保存", save)
 	button_at(toolbar, "再読込", func() -> void: guard_change(reload_draft))
-	button_at(toolbar, "新規", func() -> void: create_record(false))
-	button_at(toolbar, "複製", func() -> void: create_record(true))
-	button_at(toolbar, "削除", delete_record)
+	record_buttons.append(button_at(toolbar, "新規", func() -> void: create_record(false)))
+	record_buttons.append(button_at(toolbar, "複製", func() -> void: create_record(true)))
+	record_buttons.append(button_at(toolbar, "削除", delete_record))
 	button_at(toolbar, "保存して戦闘テスト", func() -> void: launch_test(false))
 	button_at(toolbar, "保存してエリア試遊", func() -> void: launch_test(true))
 	button_at(toolbar, "書き出し", export_data)
 	button_at(toolbar, "編集終了", func() -> void: guard_change(func() -> void: exit_requested.emit()))
 	var tabs := HFlowContainer.new()
 	add_child(tabs)
-	var names := ["カード", "敵", "装備", "アフィックス", "エリア", "計算式", "ルール", "テスト設定"]
+	var names := ["カード", "敵", "装備", "アフィックス", "エリア", "計算式", "ルール", "テスト設定", "装備ジェネレーター"]
 	var groups: Array = DefinitionRepository.GROUPS.duplicate()
 	groups.append("test")
+	groups.append("generator")
 	for i: int in groups.size():
 		var next_group: String = groups[i]
 		button_at(tabs, names[i], func() -> void:
 			group = next_group
-			selected_id = "" if group == "test" else str(repository.records(group, draft)[0].id)
+			selected_id = "" if group in ["test", "generator"] else str(repository.records(group, draft)[0].id)
 			saved_scroll = 0
 			refresh())
 	var content := HSplitContainer.new()
@@ -102,7 +105,7 @@ func current_record() -> Dictionary:
 
 func refresh_list() -> void:
 	clear_children(list_box)
-	if group == "test":
+	if group in ["test", "generator"]:
 		return
 	for record: Dictionary in repository.records(group, draft):
 		if not search.is_empty() and search.to_lower() not in (record.id + str(record.get("name", ""))).to_lower():
@@ -114,9 +117,21 @@ func refresh_list() -> void:
 			refresh())
 
 func refresh() -> void:
+	for button: Button in record_buttons:
+		button.disabled = group in ["test", "generator"]
 	refresh_list()
+	if is_instance_valid(generator_panel) and generator_panel.get_parent() == detail:
+		detail.remove_child(generator_panel)
 	clear_children(detail)
-	if group == "test":
+	if group == "generator" or (group == "rules" and selected_id == "loot"):
+		if not is_instance_valid(generator_panel):
+			generator_panel = GeneratorPanel.new()
+			detail.add_child(generator_panel)
+			generator_panel.setup(self)
+		else:
+			detail.add_child(generator_panel)
+			generator_panel.refresh()
+	elif group == "test":
 		label_at(detail, "通常セーブと独立したテスト条件。装備は基底ID（コモン個体）。")
 		form(detail, test_settings, "test")
 	else:
@@ -161,7 +176,7 @@ func options_for(key: String) -> Array:
 		"type": return DefinitionRepository.EFFECTS
 		"target": return ["self", "selected_enemy", "all_enemies", "player"]
 		"category": return ["attack", "support", "buff"]
-		"slot": return ["weapon", "armor", "accessory"]
+		"slot": return EquipmentGenerator.SLOTS
 		"stat": return DefinitionRepository.STATS
 		"formula_id": return [""] + repository.indexed("formulas", draft).keys()
 		"enemies": return repository.indexed("enemies", draft).keys()
@@ -198,7 +213,7 @@ func form(parent: Node, object: Dictionary, path: String) -> void:
 				var number := SpinBox.new()
 				number.min_value = -100000
 				number.max_value = 1000000000
-				number.step = 0.1 if key == "scaling" else 1.0
+				number.step = 0.01 if key == "scaling" or path.ends_with("/level_growth") else 1.0
 				number.value = float(value)
 				number.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				row.add_child(number)
@@ -302,7 +317,7 @@ func guard_change(action: Callable) -> void:
 	dialog.popup_centered()
 
 func create_record(duplicate: bool) -> void:
-	if group == "test":
+	if group in ["test", "generator"]:
 		return
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "複製" if duplicate else "新規（現在の項目を雛形に作成）"
@@ -328,7 +343,7 @@ func create_record(duplicate: bool) -> void:
 	dialog.popup_centered()
 
 func delete_record() -> void:
-	if group == "test":
+	if group in ["test", "generator"]:
 		return
 	var candidate := draft.duplicate(true)
 	var records: Array = candidate[group].entries
@@ -367,6 +382,8 @@ func launch_test(area_test: bool) -> void:
 		if not Progression.can_equip(profile, base):
 			issues.append("テスト装備の条件不足: " + id)
 		used_slots[base.slot] = true
+	if used_slots.has("two_handed") and (used_slots.has("right_hand") or used_slots.has("left_hand")):
+		issues.append("両手武器と左右の装備は同時に指定できません")
 	if settings.enemies.size() < 1 or settings.enemies.size() > 3:
 		issues.append("テストの敵は1～3体必要")
 	if not repository.indexed("areas").has(settings.area):
@@ -395,3 +412,7 @@ func export_data() -> void:
 		dialog.queue_free())
 	dialog.canceled.connect(dialog.queue_free)
 	dialog.popup_centered_ratio(0.75)
+
+func _exit_tree() -> void:
+	if is_instance_valid(generator_panel) and generator_panel.get_parent() == null:
+		generator_panel.free()

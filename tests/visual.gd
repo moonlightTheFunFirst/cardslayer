@@ -37,6 +37,19 @@ func run() -> void:
 	app.editor.group = "test"
 	app.editor.refresh()
 	await shot("test-settings")
+	app.editor.group = "generator"
+	app.editor.refresh()
+	var panel: GeneratorPanel = app.editor.generator_panel
+	panel.level = 20
+	panel.amount = 3
+	panel.filter_rarity = "rare"
+	await shot("generator")
+	panel.generate_items(false)
+	await shot("generator-results")
+	panel.section = "rarity"
+	panel.refresh()
+	app.editor.detail_scroll.scroll_vertical = 0
+	await shot("generator-settings")
 	app.queue_free()
 	await process_frame
 	print("VISUAL SMOKE COMPLETE")

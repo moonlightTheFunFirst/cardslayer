@@ -8,10 +8,11 @@ var root: String = "res://data"
 var data: Dictionary = {}
 var errors: Array[String] = []
 var models: DefinitionModels
+var last_backup_path: String = ""
 
-func initialize() -> bool:
-	if not OS.has_feature("editor"):
-		root = "user://editor_workspace/data"
+func initialize(override_root: String = "") -> bool:
+	if not override_root.is_empty() or not OS.has_feature("editor"):
+		root = override_root if not override_root.is_empty() else "user://editor_workspace/data"
 		if not DirAccess.dir_exists_absolute(root):
 			DirAccess.make_dir_recursive_absolute(root)
 			for group: String in GROUPS:
@@ -20,6 +21,26 @@ func initialize() -> bool:
 					errors.assign(["データ初期コピー失敗: " + group])
 					return false
 	return reload()
+
+func install_bundled() -> bool:
+	# Called only after explicit UI confirmation; retain a durable copy of edited files.
+	if root == "res://data":
+		errors.assign(["プロジェクトの定義は自動置換しません。Gitまたはバックアップから修復してください。"])
+		return false
+	var bundled := DefinitionRepository.new()
+	if not bundled.reload():
+		errors = bundled.errors
+		return false
+	var backup := root.get_base_dir().path_join("backup_" + str(Time.get_unix_time_from_system()).replace(".", "_") + "_" + str(Time.get_ticks_usec()))
+	if DirAccess.make_dir_recursive_absolute(backup) != OK:
+		errors.assign(["定義データのバックアップ作成に失敗しました"])
+		return false
+	for group: String in GROUPS:
+		if DirAccess.copy_absolute(root + "/" + group + ".json", backup + "/" + group + ".json") != OK:
+			errors.assign(["旧データの退避に失敗しました: " + group])
+			return false
+	last_backup_path = backup
+	return save_draft(bundled.data)
 
 func reload() -> bool:
 	var incoming: Dictionary = {}
@@ -120,7 +141,7 @@ func validate(source: Dictionary) -> Array[String]:
 				check_effects(action.get("effects"), path + "/actions", indexes, issues)
 	for entry: Dictionary in records("items", source):
 		var path: String = "items/" + entry.id
-		if entry.get("slot") not in ["weapon", "armor", "accessory"]:
+		if entry.get("slot") not in EquipmentGenerator.SLOTS:
 			issues.append(path + ": 部位が不正")
 		check_number(entry, "level", 1, 999, path, issues)
 		for field: String in ["bonuses", "requirements"]:
@@ -131,6 +152,12 @@ func validate(source: Dictionary) -> Array[String]:
 					if stat not in STATS:
 						issues.append(path + ": 未知の能力 " + stat)
 					check_number(entry[field], stat, 0, 100000, path, issues)
+		if not entry.get("level_growth") is Dictionary:
+			issues.append(path + "/level_growth: レベル成長値が必要")
+		else:
+			for stat: Variant in entry.level_growth:
+				if stat not in STATS or not EquipmentGenerator.valid_number(entry.level_growth[stat], 0, 100000):
+					issues.append(path + "/level_growth: 能力名または0～100000の成長値が不正")
 		check_refs(entry.get("affixes"), indexes.affixes, path + "/affixes", issues)
 		if entry.get("affixes") is Array and entry.affixes.size() < 2:
 			issues.append(path + ": レア抽選のためアフィックス候補2件以上が必要")
@@ -170,12 +197,16 @@ func validate(source: Dictionary) -> Array[String]:
 			issues.append("rules: rarity_weightsが必要")
 		else:
 			var total: float = 0
-			for rarity: String in ["common", "magic", "rare"]:
+			for rarity: String in EquipmentGenerator.RARITIES:
 				check_number(rules.rarity_weights, rarity, 0, 100000, "rules/rarity_weights", issues)
 				if is_number(rules.rarity_weights.get(rarity)):
 					total += rules.rarity_weights[rarity]
 			if total <= 0:
 				issues.append("rules/rarity_weights: 合計は正数が必要")
+	if not indexes.rules.has("loot"):
+		issues.append("rules/loot: 新装備抽選の設定がありません。新しい定義データ一式を導入してください。")
+	else:
+		issues.append_array(EquipmentGenerator.validate(indexes.rules.loot, indexes.items, indexes.affixes))
 	return issues
 
 func is_number(value: Variant) -> bool:

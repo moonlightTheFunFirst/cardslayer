@@ -4,7 +4,7 @@
     {
       "id": "sword",
       "name": "旅人の剣",
-      "slot": "weapon",
+      "slot": "right_hand",
       "bonuses": {
         "strength": 2
       },
@@ -14,13 +14,21 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
-      ]
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "strength": 0.4
+      }
     },
     {
       "id": "staff",
-      "name": "灰木の杖",
-      "slot": "weapon",
+      "name": "灰木の両手杖",
+      "slot": "two_handed",
       "bonuses": {
         "wisdom": 2
       },
@@ -30,13 +38,21 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
-      ]
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "wisdom": 0.4
+      }
     },
     {
       "id": "vest",
       "name": "革の胴衣",
-      "slot": "armor",
+      "slot": "body",
       "bonuses": {
         "max_hp": 8
       },
@@ -46,13 +62,21 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
-      ]
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "max_hp": 1.6
+      }
     },
     {
       "id": "robe",
       "name": "修練の衣",
-      "slot": "armor",
+      "slot": "body",
       "bonuses": {
         "max_mp": 3
       },
@@ -62,13 +86,21 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
-      ]
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "max_mp": 0.6
+      }
     },
     {
       "id": "ring",
-      "name": "力の指輪",
-      "slot": "accessory",
+      "name": "剛力の籠手",
+      "slot": "arms",
       "bonuses": {
         "strength": 1
       },
@@ -80,13 +112,21 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
-      ]
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "strength": 0.2
+      }
     },
     {
       "id": "charm",
-      "name": "灯火のお守り",
-      "slot": "accessory",
+      "name": "灯火の兜",
+      "slot": "head",
       "bonuses": {
         "wisdom": 1,
         "max_hp": 3
@@ -99,7 +139,88 @@
         "vital",
         "arcane",
         "mighty",
-        "sage"
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ],
+      "level_growth": {
+        "wisdom": 0.2,
+        "max_hp": 0.6
+      }
+    },
+    {
+      "id": "shield",
+      "name": "鉄縁の盾",
+      "slot": "left_hand",
+      "bonuses": {
+        "max_hp": 6
+      },
+      "requirements": {},
+      "level": 1,
+      "level_growth": {
+        "max_hp": 1.2
+      },
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ]
+    },
+    {
+      "id": "dagger",
+      "name": "守りの短剣",
+      "slot": "left_hand",
+      "bonuses": {
+        "strength": 1
+      },
+      "requirements": {},
+      "level": 1,
+      "level_growth": {
+        "strength": 0.2
+      },
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
+      ]
+    },
+    {
+      "id": "boots",
+      "name": "旅人のブーツ",
+      "slot": "feet",
+      "bonuses": {
+        "agility": 2
+      },
+      "requirements": {},
+      "level": 1,
+      "level_growth": {
+        "agility": 0.4
+      },
+      "affixes": [
+        "vital",
+        "arcane",
+        "mighty",
+        "sage",
+        "swift",
+        "lucky",
+        "stout",
+        "lucid",
+        "blue_star"
       ]
     }
   ]

@@ -58,6 +58,7 @@ class Item extends RefCounted:
 	var slot: String
 	var level: int
 	var bonuses: Dictionary[String, int] = {}
+	var level_growth: Dictionary[String, float] = {}
 	var requirements: Dictionary[String, int] = {}
 	var affixes: Array[String] = []
 	func _init(raw: Dictionary) -> void:
@@ -66,6 +67,8 @@ class Item extends RefCounted:
 		level = int(raw.level)
 		for key: String in raw.bonuses:
 			bonuses[key] = int(raw.bonuses[key])
+		for key: String in raw.level_growth:
+			level_growth[key] = float(raw.level_growth[key])
 		for key: String in raw.requirements:
 			requirements[key] = int(raw.requirements[key])
 		affixes.assign(raw.affixes)

@@ -27,6 +27,20 @@ func run(app: Control) -> void:
 	results.checks["save_load"] = not restored.is_empty() and JSON.stringify(restored.inventory) == JSON.stringify(inventory)
 	app.open_editor()
 	await get_tree().process_frame
+	app.editor.group = "generator"
+	app.editor.refresh()
+	var panel: GeneratorPanel = app.editor.generator_panel
+	panel.amount = 10
+	panel.filter_rarity = "rare"
+	results.checks["generator"] = panel.generate_items(false) and panel.results.size() == 10 and panel.section == "results" and not str(panel.results[0].get("name", "")).is_empty()
+	var loot_policy: Dictionary = app.repository.indexed("rules", app.editor.draft).loot
+	loot_policy.rarities[2].count_weights = {"7": 100}
+	results.checks["generator_settings_save"] = app.editor.save()
+	var random := RandomNumberGenerator.new()
+	random.seed = 222
+	results.checks["generator_settings_reload"] = EquipmentGenerator.new(app.repository.data).generate(random, 1, "rare").item.affixes.size() == 7
+	results.checks["generator_settings_restore"] = app.repository.save_draft(original)
+	app.editor.reload_draft()
 	app.start_test(app.editor.test_settings, false)
 	app.return_editor()
 	app.close_editor()

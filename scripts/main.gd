@@ -40,12 +40,24 @@ func _ready() -> void:
 	margin.add_child(page)
 	loot_rng.randomize()
 	battle_rng.randomize()
-	if not repository.initialize():
-		label("定義データを読み込めません。元ファイルは保持しています。\n" + "\n".join(repository.errors))
+	var smoke_requested: bool = "--smoke" in OS.get_cmdline_user_args() and ProjectSettings.get_setting("cardslayer/development_enabled", true)
+	if not repository.initialize("user://smoke/data_v2" if smoke_requested else ""):
+		label("定義データを読み込めません。元ファイルは保持しています。")
+		if repository.root != "res://data":
+			button("新しい同梱定義を導入", func() -> void:
+				confirm("現在の編集データ一式をバックアップした上で、新しい同梱定義に置き換えます。通常セーブは保持します。続行しますか？", func() -> void:
+					if repository.install_bundled():
+						snapshot = repository.data.duplicate(true)
+						notice = "定義を更新しました。旧データの退避先: " + repository.last_backup_path
+						show_screen("title")
+					else:
+						label("\n".join(repository.errors))))
+		var error_list := scroll_column()
+		label("\n".join(repository.errors), error_list)
 		return
 	snapshot = repository.data.duplicate(true)
 	show_screen("title")
-	if "--smoke" in OS.get_cmdline_user_args() and ProjectSettings.get_setting("cardslayer/development_enabled", true):
+	if smoke_requested:
 		var smoke := DevelopmentSmoke.new()
 		add_child(smoke)
 		smoke.call_deferred("run", self)
@@ -142,6 +154,10 @@ func title_screen() -> void:
 			show_screen("hub"), page, not FileAccess.file_exists(saves.path))
 	if ProjectSettings.get_setting("cardslayer/development_enabled", true):
 		button("総合エディタ", open_editor)
+		button("装備品ジェネレーター", func() -> void:
+			open_editor()
+			editor.group = "generator"
+			editor.refresh())
 	button("終了", confirm_quit)
 
 func new_game() -> void:
@@ -200,14 +216,15 @@ func item_text(item: Dictionary) -> String:
 	var parts: Array[String] = []
 	for affix: Dictionary in item.affixes:
 		parts.append("%s +%d" % [UiText.name_for(affix.stat), affix.value])
-	return "%s [%s] %s\n基礎補正: %s / 追加: %s" % [base.name, UiText.name_for(item.rarity), UiText.name_for(base.slot), UiText.bonuses(base.bonuses), "、".join(parts) if not parts.is_empty() else "なし"]
+	return "%s [%s] Lv.%d %s / 基底: %s\n基礎補正: %s / 追加: %s" % [item.get("name", base.name), UiText.name_for(item.rarity), item.get("item_level", base.level), UiText.name_for(base.slot), base.name, UiText.bonuses(item.get("base_bonuses", base.bonuses)), "、".join(parts) if not parts.is_empty() else "なし"]
 
 func equipment_screen() -> void:
 	label("装備 — 基礎能力で装備条件を判定", page, 28)
 	label("現在: " + stats_text(Progression.stats(profile, snapshot)))
-	var controls := row()
+	var controls := HFlowContainer.new()
+	page.add_child(controls)
 	button("拠点へ戻る", func() -> void: show_screen("hub"), controls)
-	for slot: String in ["weapon", "armor", "accessory"]:
+	for slot: String in EquipmentGenerator.SLOTS:
 		button(UiText.name_for(slot) + " を外す", func() -> void:
 			profile.equipped.erase(slot)
 			clamp_profile(); persist(); show_screen("equipment"), controls, not profile.equipped.has(slot))
@@ -216,13 +233,13 @@ func equipment_screen() -> void:
 		label("戦闘に勝つと装備が1個手に入ります。", list)
 	for item: Dictionary in profile.inventory:
 		var base: Dictionary = repository.indexed("items", snapshot)[item.base_id]
-		label(item_text(item), list)
+		label(item_text(item), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[item.rarity])
 		var comparison := profile.duplicate(true)
-		comparison.equipped[base.slot] = item.instance_id
+		Progression.equip(comparison, item, snapshot)
 		label("装備後: " + stats_text(Progression.stats(comparison, snapshot)) + " / 必要Lv %s %s" % [base.level, UiText.bonuses(base.requirements)], list)
 		button("装備中" if item.instance_id in profile.equipped.values() else "装備する", func() -> void:
-			profile.equipped[base.slot] = item.instance_id
-			clamp_profile(); persist(); show_screen("equipment"), list, not Progression.can_equip(profile, base) or item.instance_id in profile.equipped.values())
+			Progression.equip(profile, item, snapshot)
+			clamp_profile(); persist(); show_screen("equipment"), list, not Progression.can_equip_instance(profile, item, base) or item.instance_id in profile.equipped.values())
 
 func clamp_profile() -> void:
 	var stats := Progression.stats(profile, snapshot)
@@ -340,7 +357,7 @@ func after_action() -> void:
 func reward_screen() -> void:
 	label("勝利 — 報酬確定", page, 36)
 	label("EXP +%s  Gold +%s  レベルアップ +%s" % [reward_result.xp, reward_result.gold, reward_result.levels])
-	label(item_text(reward_result.item))
+	label(item_text(reward_result.item)).add_theme_color_override("font_color", EquipmentGenerator.COLORS[reward_result.item.rarity])
 	button("次へ", func() -> void:
 		if area_id.is_empty() or node_id == repository.indexed("areas", snapshot)[area_id].boss:
 			return_hub()
@@ -416,13 +433,16 @@ func start_test(settings: Dictionary, area_test: bool) -> void:
 	profile.base = settings.base.duplicate(true)
 	profile.deck = settings.deck.duplicate()
 	profile.hp = int(settings.hp)
+	var gear_rng := RandomNumberGenerator.new()
+	gear_rng.seed = int(settings.seed) + 2
 	for id: String in settings.equipment:
 		var base: Dictionary = repository.indexed("items", snapshot)[id]
 		if not Progression.can_equip(profile, base):
 			continue
-		var item: Dictionary = {"instance_id": "test_" + id, "base_id": id, "rarity": "common", "affixes": []}
+		var item: Dictionary = EquipmentGenerator.new(snapshot).generate(gear_rng, 1, "common", id).item
+		item["instance_id"] = "test_" + id
 		profile.inventory.append(item)
-		profile.equipped[base.slot] = item.instance_id
+		Progression.equip(profile, item, snapshot)
 	battle_rng.seed = int(settings.seed)
 	loot_rng.seed = int(settings.seed) + 1
 	area_id = settings.area if area_test else ""

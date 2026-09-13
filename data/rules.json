@@ -36,13 +36,440 @@
         "vest",
         "robe",
         "ring",
-        "charm"
+        "charm",
+        "shield",
+        "dagger",
+        "boots"
       ],
       "rarity_weights": {
         "common": 70,
         "magic": 25,
-        "rare": 5
+        "rare": 5,
+        "legendary": 0,
+        "unique": 0
       }
+    },
+    {
+      "id": "loot",
+      "rarities": [
+        {
+          "id": "common",
+          "count_weights": {
+            "1": 100
+          },
+          "affix_weights": {
+            "vital": 100,
+            "arcane": 100,
+            "mighty": 100,
+            "sage": 100,
+            "swift": 100,
+            "lucky": 100,
+            "stout": 100,
+            "lucid": 100,
+            "blue_star": 0
+          },
+          "value_ranges": {
+            "vital": {
+              "min": 3,
+              "max": 10,
+              "exception_chance": 1,
+              "exception_min": 11,
+              "exception_max": 20
+            },
+            "arcane": {
+              "min": 1,
+              "max": 4,
+              "exception_chance": 1,
+              "exception_min": 5,
+              "exception_max": 8
+            },
+            "mighty": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 1,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "sage": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 1,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "swift": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 1,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "lucky": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 1,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "stout": {
+              "min": 2,
+              "max": 8,
+              "exception_chance": 1,
+              "exception_min": 9,
+              "exception_max": 16
+            },
+            "lucid": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 1,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "blue_star": {
+              "min": 6,
+              "max": 12,
+              "exception_chance": 1,
+              "exception_min": 13,
+              "exception_max": 24
+            }
+          }
+        },
+        {
+          "id": "magic",
+          "count_weights": {
+            "1": 70,
+            "2": 30
+          },
+          "affix_weights": {
+            "vital": 100,
+            "arcane": 100,
+            "mighty": 100,
+            "sage": 100,
+            "swift": 100,
+            "lucky": 100,
+            "stout": 100,
+            "lucid": 100,
+            "blue_star": 1
+          },
+          "value_ranges": {
+            "vital": {
+              "min": 3,
+              "max": 10,
+              "exception_chance": 0,
+              "exception_min": 11,
+              "exception_max": 20
+            },
+            "arcane": {
+              "min": 1,
+              "max": 4,
+              "exception_chance": 0,
+              "exception_min": 5,
+              "exception_max": 8
+            },
+            "mighty": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "sage": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "swift": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "lucky": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "stout": {
+              "min": 2,
+              "max": 8,
+              "exception_chance": 0,
+              "exception_min": 9,
+              "exception_max": 16
+            },
+            "lucid": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "blue_star": {
+              "min": 6,
+              "max": 12,
+              "exception_chance": 0,
+              "exception_min": 13,
+              "exception_max": 24
+            }
+          }
+        },
+        {
+          "id": "rare",
+          "count_weights": {
+            "3": 7000,
+            "4": 2400,
+            "5": 590,
+            "6": 9,
+            "7": 1
+          },
+          "affix_weights": {
+            "vital": 100,
+            "arcane": 100,
+            "mighty": 100,
+            "sage": 100,
+            "swift": 100,
+            "lucky": 100,
+            "stout": 100,
+            "lucid": 100,
+            "blue_star": 0
+          },
+          "value_ranges": {
+            "vital": {
+              "min": 3,
+              "max": 10,
+              "exception_chance": 0,
+              "exception_min": 11,
+              "exception_max": 20
+            },
+            "arcane": {
+              "min": 1,
+              "max": 4,
+              "exception_chance": 0,
+              "exception_min": 5,
+              "exception_max": 8
+            },
+            "mighty": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "sage": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "swift": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "lucky": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "stout": {
+              "min": 2,
+              "max": 8,
+              "exception_chance": 0,
+              "exception_min": 9,
+              "exception_max": 16
+            },
+            "lucid": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "blue_star": {
+              "min": 6,
+              "max": 12,
+              "exception_chance": 0,
+              "exception_min": 13,
+              "exception_max": 24
+            }
+          }
+        },
+        {
+          "id": "legendary",
+          "count_weights": {
+            "1": 40,
+            "2": 60
+          },
+          "affix_weights": {
+            "vital": 100,
+            "arcane": 100,
+            "mighty": 100,
+            "sage": 100,
+            "swift": 100,
+            "lucky": 100,
+            "stout": 100,
+            "lucid": 100,
+            "blue_star": 0
+          },
+          "value_ranges": {
+            "vital": {
+              "min": 3,
+              "max": 10,
+              "exception_chance": 0,
+              "exception_min": 11,
+              "exception_max": 20
+            },
+            "arcane": {
+              "min": 1,
+              "max": 4,
+              "exception_chance": 0,
+              "exception_min": 5,
+              "exception_max": 8
+            },
+            "mighty": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "sage": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "swift": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "lucky": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "stout": {
+              "min": 2,
+              "max": 8,
+              "exception_chance": 0,
+              "exception_min": 9,
+              "exception_max": 16
+            },
+            "lucid": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "blue_star": {
+              "min": 6,
+              "max": 12,
+              "exception_chance": 0,
+              "exception_min": 13,
+              "exception_max": 24
+            }
+          }
+        },
+        {
+          "id": "unique",
+          "count_weights": {
+            "1": 40,
+            "2": 60
+          },
+          "affix_weights": {
+            "vital": 100,
+            "arcane": 100,
+            "mighty": 100,
+            "sage": 100,
+            "swift": 100,
+            "lucky": 100,
+            "stout": 100,
+            "lucid": 100,
+            "blue_star": 0
+          },
+          "value_ranges": {
+            "vital": {
+              "min": 3,
+              "max": 10,
+              "exception_chance": 0,
+              "exception_min": 11,
+              "exception_max": 20
+            },
+            "arcane": {
+              "min": 1,
+              "max": 4,
+              "exception_chance": 0,
+              "exception_min": 5,
+              "exception_max": 8
+            },
+            "mighty": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "sage": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "swift": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "lucky": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "stout": {
+              "min": 2,
+              "max": 8,
+              "exception_chance": 0,
+              "exception_min": 9,
+              "exception_max": 16
+            },
+            "lucid": {
+              "min": 1,
+              "max": 3,
+              "exception_chance": 0,
+              "exception_min": 4,
+              "exception_max": 6
+            },
+            "blue_star": {
+              "min": 6,
+              "max": 12,
+              "exception_chance": 0,
+              "exception_min": 13,
+              "exception_max": 24
+            }
+          }
+        }
+      ]
     }
   ]
 }

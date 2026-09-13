@@ -38,5 +38,7 @@ for id,name,slot,bonuses,requirements in [('sword','旅人の剣','weapon',{'str
 areas=[dict(id='forest',name='朽ち森',start='start',boss='boss',nodes=[dict(id=id,enemies=es,next=ns) for id,es,ns in [('start',[],['a','b']),('a',['mossling'],['c']),('b',['wisp'],['c']),('c',['thorn','mossling'],['boss']),('boss',['warden'],[])]])]
 formulas=[dict(id='physical_damage',expression='base + strength * scaling'),dict(id='magic_damage',expression='base + wisdom * scaling')]
 rules=[dict(id='combat',ap=3,initial_hand=5,draw=1,hand_limit=10,mp_regen=2,starter_deck=['strike']*6+['guard']*6+[c['id'] for c in cards[2:]],loot_bases=[i['id'] for i in items],rarity_weights=dict(common=70,magic=25,rare=5))]
+from loot_samples import add_loot_rules
+add_loot_rules(items, affixes, rules)
 for group in ['cards','enemies','items','affixes','areas','formulas','rules']:
     (ROOT/f'{group}.json').write_text(json.dumps(dict(schema_version=1,entries=globals()[group]),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
