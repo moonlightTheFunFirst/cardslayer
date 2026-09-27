@@ -165,12 +165,16 @@ func resolve(effects: Array, source: Dictionary, selected: int) -> void:
 			record("effect", {"type": effect.type, "source": actor_index(source), "target": actor_index(target), "amount": amount, "absorbed": absorbed, "group": effect_group, "stat": str(effect.get("stat", "")), "magic": str(effect.get("formula_id", "")).contains("magic"), "state": state_of(target)})
 
 func effect_value(effect: Dictionary, source: Dictionary) -> Dictionary:
-	var inputs := effective(source)
+	return BattleEngine.evaluate_effect(effect, effective(source), formulas)
+
+## Effect amount for a stat block; also used to preview cards outside battle.
+static func evaluate_effect(effect: Dictionary, stats: Dictionary, formula_index: Dictionary) -> Dictionary:
+	var inputs := stats.duplicate()
 	inputs["base"] = effect.value
 	inputs["scaling"] = effect.get("scaling", 0)
 	var result: Dictionary = {"ok": true, "value": float(effect.value)}
 	if not str(effect.get("formula_id", "")).is_empty():
-		result = FormulaEvaluator.new().evaluate(formulas[effect.formula_id].expression, inputs)
+		result = FormulaEvaluator.new().evaluate(formula_index[effect.formula_id].expression, inputs)
 	if result.ok:
 		if float(result.value) > 2147483647.0:
 			return {"ok": false, "error": "数式結果が処理可能範囲を超えています", "inputs": inputs}

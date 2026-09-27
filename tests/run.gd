@@ -367,14 +367,14 @@ func check_generator() -> void:
 	file.close()
 	var old_file := FileAccess.get_file_as_string(saver.path)
 	var loaded := saver.read_profile(defs)
-	expect(not loaded.is_empty() and loaded.save_version == 2 and loaded.inventory[0].affixes.is_empty() and FileAccess.get_file_as_string(saver.path) == old_file, "legacy file loads without overwriting or rerolling")
+	expect(not loaded.is_empty() and loaded.save_version == SaveRepository.VERSION and loaded.inventory[0].affixes.is_empty() and FileAccess.get_file_as_string(saver.path) == old_file, "legacy file loads without overwriting or rerolling")
 	var upgrade := DefinitionRepository.new()
 	upgrade.root = "res://.godot/tests/legacy_data"
 	DirAccess.make_dir_recursive_absolute(upgrade.root)
 	for group: String in DefinitionRepository.GROUPS:
 		var document: Dictionary = defs[group].duplicate(true)
 		if group == "rules":
-			document.entries.pop_back()
+			document.entries = document.entries.filter(func(entry: Dictionary) -> bool: return entry.id != "loot")
 		file = FileAccess.open(upgrade.root + "/" + group + ".json", FileAccess.WRITE)
 		file.store_string(JSON.stringify(document))
 		file.close()

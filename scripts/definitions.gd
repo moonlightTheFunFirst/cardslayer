@@ -207,6 +207,8 @@ func validate(source: Dictionary) -> Array[String]:
 		issues.append("rules/loot: 新装備抽選の設定がありません。新しい定義データ一式を導入してください。")
 	else:
 		issues.append_array(EquipmentGenerator.validate(indexes.rules.loot, indexes.items, indexes.affixes))
+	if indexes.rules.has("shop"):
+		issues.append_array(Shop.validate(indexes.rules.shop))
 	return issues
 
 func is_number(value: Variant) -> bool:

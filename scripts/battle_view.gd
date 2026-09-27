@@ -111,38 +111,11 @@ func build_stage() -> void:
 func texture_or_null(path: String) -> Texture2D:
 	return load(path) if ResourceLoader.exists(path) else null
 
-func style(path: String, margin: float = 8.0) -> StyleBox:
-	if not ResourceLoader.exists(path):
-		return StyleBoxFlat.new()
-	var box := StyleBoxTexture.new()
-	box.texture = load(path)
-	box.texture_margin_left = margin
-	box.texture_margin_right = margin
-	box.texture_margin_top = margin
-	box.texture_margin_bottom = margin
-	box.content_margin_left = 12
-	box.content_margin_right = 12
-	box.content_margin_top = 4
-	box.content_margin_bottom = 4
-	return box
+func style(path: String) -> StyleBox:
+	return PixelUi.style(path)
 
 func make_button(text: String, action: Callable, parent: Node, end_style: bool = false) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 18 if end_style else 14)
-	button.add_theme_stylebox_override("normal", style("res://assets/ui/button_end.png" if end_style else "res://assets/ui/button.png"))
-	button.add_theme_stylebox_override("hover", style("res://assets/ui/button_end_hover.png" if end_style else "res://assets/ui/button_hover.png"))
-	button.add_theme_stylebox_override("pressed", style("res://assets/ui/button_end_hover.png" if end_style else "res://assets/ui/button_hover.png"))
-	button.add_theme_stylebox_override("disabled", style("res://assets/ui/button_end_disabled.png"))
-	button.add_theme_color_override("font_color", Color("f4ead8"))
-	button.add_theme_color_override("font_disabled_color", Color("8a8090"))
-	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	button.pressed.connect(func() -> void:
-		sound.play("click", 0.0)
-		action.call())
-	parent.add_child(button)
-	return button
+	return PixelUi.button(text, action, parent, sound, end_style)
 
 func build_hud() -> void:
 	var bar := PanelContainer.new()

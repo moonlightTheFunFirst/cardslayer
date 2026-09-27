@@ -470,6 +470,27 @@
           }
         }
       ]
+    },
+    {
+      "id": "shop",
+      "equipment_count": 4,
+      "level_offset": 0,
+      "price_base": 20,
+      "price_per_level": 6,
+      "rarity_weights": {
+        "common": 50,
+        "magic": 32,
+        "rare": 14,
+        "legendary": 3,
+        "unique": 1
+      },
+      "rarity_multipliers": {
+        "common": 1,
+        "magic": 2,
+        "rare": 4,
+        "legendary": 8,
+        "unique": 10
+      }
     }
   ]
 }

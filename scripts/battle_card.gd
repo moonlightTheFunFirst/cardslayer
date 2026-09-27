@@ -54,6 +54,7 @@ static func text_label(value: String, font_size: int, color: Color, outline: int
 func setup(card_data: Dictionary) -> void:
 	card = card_data
 	size = SIZE
+	custom_minimum_size = SIZE
 	pivot_offset = SIZE / 2
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var category: String = card.get("category", "attack")
@@ -99,9 +100,25 @@ func refresh(engine: BattleEngine, reason: String, player_turn: bool) -> void:
 	glow = playable and player_turn
 	cost_label.label_settings.font_color = Color.WHITE if engine.ap >= int(card.ap) else Color("ff6a5a")
 	mp_label.label_settings.font_color = Color("9ad0ff") if int(engine.player.mp) >= int(card.mp) else Color("ff6a5a")
-	var lines: Array[String] = []
+	var evaluations: Array = []
 	for effect: Dictionary in card.effects:
-		var evaluated := engine.effect_value(effect, engine.player)
+		evaluations.append(engine.effect_value(effect, engine.player))
+	describe(evaluations)
+	modulate = Color.WHITE if playable else Color(0.62, 0.6, 0.66)
+	queue_redraw()
+
+## Out-of-battle display (card list, deck editing) using the hero's current stats.
+func preview(stats: Dictionary, formula_index: Dictionary) -> void:
+	var evaluations: Array = []
+	for effect: Dictionary in card.effects:
+		evaluations.append(BattleEngine.evaluate_effect(effect, stats, formula_index))
+	describe(evaluations)
+
+func describe(evaluations: Array) -> void:
+	var lines: Array[String] = []
+	for i: int in card.effects.size():
+		var effect: Dictionary = card.effects[i]
+		var evaluated: Dictionary = evaluations[i]
 		var value: String = str(evaluated.value) if evaluated.ok else "式エラー"
 		var color := "ffd070"
 		if evaluated.ok and int(evaluated.value) > int(effect.value):
@@ -113,8 +130,6 @@ func refresh(engine: BattleEngine, reason: String, player_turn: bool) -> void:
 			label = UiText.name_for(str(effect.get("stat", ""))) + "+"
 		lines.append("%s [color=#%s]%s[/color]" % [label, color, value])
 	desc.text = "[center]%s\n%s[/center]" % [card.description, "  ".join(lines)]
-	modulate = Color.WHITE if playable else Color(0.62, 0.6, 0.66)
-	queue_redraw()
 
 func _draw() -> void:
 	if glow:

@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw
 from pixel import (OUTLINE, canvas, compose, dither_gradient, flat, glow, outline_all, part, px, ramp, rgb, rng,
                    shift, upscale)
 
+from hub_art import hub_backgrounds
+
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
 
@@ -449,6 +451,8 @@ def build():
         save(fn(), "sprites", "enemies", name + ".png")
     save(background(False), "backgrounds", "forest.png")
     save(background(True), "backgrounds", "forest_boss.png")
+    for name, image in hub_backgrounds().items():
+        save(image, "backgrounds", name + ".png")
     for category in CARD_COLORS:
         save(card_frame(category), "cards", "frame_%s.png" % category)
         save(art("default", category), "cards", "art", "default_%s.png" % category)

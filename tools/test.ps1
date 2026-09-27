@@ -7,4 +7,6 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $Godot --headless --path $projectRoot --script res://tests/generator_ui.gd
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $Godot --headless --path $projectRoot --script res://tests/battle_ui.gd
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $Godot --headless --path $projectRoot --script res://tests/hub.gd
 exit $LASTEXITCODE

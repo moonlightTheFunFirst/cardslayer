@@ -3,7 +3,7 @@ extends RefCounted
 
 static func new_player(snapshot: Dictionary) -> Dictionary:
 	var rules: Dictionary = DefinitionRepository.new().indexed("rules", snapshot).combat
-	return {"save_version": 2, "level": 1, "xp": 0, "gold": 0, "base": {"max_hp": 60, "max_mp": 10, "strength": 5, "wisdom": 5, "agility": 5, "luck": 5}, "inventory": [], "equipped": {}, "deck": rules.starter_deck.duplicate(), "cleared": [], "hp": 60, "mp": 10}
+	return {"save_version": SaveRepository.VERSION, "hub_background": HubActions.BACKGROUNDS[0].id, "shop": {"stock": []}, "level": 1, "xp": 0, "gold": 0, "base": {"max_hp": 60, "max_mp": 10, "strength": 5, "wisdom": 5, "agility": 5, "luck": 5}, "inventory": [], "equipped": {}, "deck": rules.starter_deck.duplicate(), "cleared": [], "hp": 60, "mp": 10}
 
 static func stats(profile: Dictionary, snapshot: Dictionary) -> Dictionary:
 	var result: Dictionary = profile.base.duplicate()

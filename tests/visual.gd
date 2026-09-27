@@ -22,7 +22,22 @@ func run() -> void:
 	app.saves.path = "res://.godot/tests/visual-profile.json"
 	await shot("title")
 	app.new_game()
+	app.profile.gold = 480
+	await wait(0.3)
 	await shot("hub")
+	for background: String in ["hall", "tower"]:
+		HubActions.set_background(app.profile, background)
+		app.show_screen("hub")
+		await wait(0.2)
+		await shot("hub-" + background)
+	HubActions.set_background(app.profile, "camp")
+	for hub_page: String in ["status", "cards", "deck", "equipment", "shop"]:
+		app.show_screen(hub_page)
+		await wait(0.3)
+		await shot("hub-" + hub_page)
+	app.show_screen("debug_shop")
+	await shot("debug-shop")
+	app.show_screen("hub")
 	app.depart()
 	await shot("map")
 	app.node_id = "a"

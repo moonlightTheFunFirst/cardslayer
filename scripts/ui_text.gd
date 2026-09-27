@@ -13,6 +13,7 @@ const NAMES: Dictionary = {
 	"effects": "効果", "actions": "行動", "xp": "経験値", "gold": "ゴールド", "slot": "部位", "bonuses": "基礎補正", "requirements": "装備条件", "level": "レベル",
 	"affixes": "アフィックス候補", "min": "最小値", "max": "最大値", "weight": "抽選重み", "nodes": "ノード", "enemies": "敵構成", "next": "接続先", "start": "開始ノード", "boss": "ボスノード",
 	"expression": "数式", "initial_hand": "初期手札", "hand_limit": "手札上限", "mp_regen": "ターンMP回復", "starter_deck": "初期デッキ", "loot_bases": "装備抽選候補", "rarity_weights": "等級抽選重み",
+	"equipment_count": "装備品の品数", "level_offset": "品物レベル補正（主人公Lv＋）", "price_base": "基本価格", "price_per_level": "レベルごとの価格加算", "rarity_multipliers": "等級ごとの価格倍率",
 	"seed": "乱数シード", "base": "基礎能力", "deck": "デッキ", "equipment": "装備", "area": "エリア"
 }
 

@@ -1,13 +1,19 @@
 class_name SaveRepository
 extends RefCounted
 
+const VERSION: int = 3
+
 var path: String = "user://saves/profile.json"
 var error: String = ""
 var write_blocked: bool = false
 
 func validate(profile: Variant, definitions: Dictionary) -> String:
-	if not profile is Dictionary or profile.get("save_version") != 2:
+	if not profile is Dictionary or profile.get("save_version") != VERSION:
 		return "セーブ形式／save_versionが不正です"
+	if str(profile.get("hub_background", "")) not in HubActions.background_ids():
+		return "本拠地の背景IDが不正です"
+	if not profile.get("shop") is Dictionary or not profile.shop.get("stock") is Array:
+		return "ショップの品揃えの形式が不正です"
 	for key: String in ["level", "xp", "gold"]:
 		if not (profile.get(key) is float or profile.get(key) is int) or profile[key] < (1 if key == "level" else 0) or floor(float(profile[key])) != float(profile[key]):
 			return key + "が不正です"
@@ -27,29 +33,18 @@ func validate(profile: Variant, definitions: Dictionary) -> String:
 	var affixes := repo.indexed("affixes", definitions)
 	var instances: Dictionary = {}
 	for item: Variant in profile.inventory:
-		if not item is Dictionary or not item.get("instance_id") is String or item.instance_id.is_empty() or instances.has(item.instance_id) or not bases.has(item.get("base_id")) or not item.get("affixes") is Array or item.get("rarity") not in EquipmentGenerator.RARITIES:
+		var problem := validate_item(item, bases, affixes)
+		if not problem.is_empty():
+			return problem
+		if instances.has(item.instance_id):
 			return "装備個体の形式／基底IDが不正です"
 		instances[item.instance_id] = item
-		if item.has("name") and (not item.name is String or item.name.strip_edges().is_empty() or item.name.length() > 160):
-			return "装備品の名前が不正です"
-		if item.get("generation_version") != 1 and item.get("generation_version") != 2:
-			return "装備生成バージョンが不正です"
-		var counts: Array = EquipmentGenerator.COUNTS[item.rarity] if item.generation_version == 2 else [["common", "magic", "rare"].find(item.rarity)]
-		if item.affixes.size() not in counts:
-			return "装備等級とアフィックス個数が一致しません"
-		if item.generation_version == 2:
-			if not EquipmentGenerator.valid_number(item.get("item_level"), 1, 999) or float(item.item_level) != floor(float(item.item_level)) or not item.get("base_bonuses") is Dictionary:
-				return "装備レベル／基礎値が不正です"
-			for stat: Variant in item.base_bonuses:
-				if stat not in DefinitionRepository.STATS or not EquipmentGenerator.valid_number(item.base_bonuses[stat], 0, 1000000000) or float(item.base_bonuses[stat]) != floor(float(item.base_bonuses[stat])):
-					return "装備基礎値が不正です"
-		var seen_affixes: Dictionary = {}
-		for affix: Variant in item.affixes:
-			if not affix is Dictionary or not affixes.has(affix.get("id")) or affix.get("stat") not in DefinitionRepository.STATS or not (affix.get("value") is int or affix.get("value") is float):
-				return "装備アフィックスが不正です"
-			if seen_affixes.has(affix.id) or not is_finite(float(affix.value)) or affix.value < 0 or affix.value > 1000000000 or floor(float(affix.value)) != float(affix.value):
-				return "アフィックスの重複／値が不正です"
-			seen_affixes[affix.id] = true
+	for offer: Variant in profile.shop.stock:
+		if not offer is Dictionary or offer.get("kind") != "equipment" or not offer.get("sold") is bool or not EquipmentGenerator.valid_number(offer.get("price"), 1, 1000000000) or floor(float(offer.price)) != float(offer.price):
+			return "ショップの商品が不正です"
+		var offer_problem := validate_item(offer.get("item"), bases, affixes)
+		if not offer_problem.is_empty():
+			return "ショップの商品: " + offer_problem
 	for slot: Variant in profile.equipped:
 		if slot not in EquipmentGenerator.SLOTS or not instances.has(profile.equipped[slot]):
 			return "装備中instance_idが不正です"
@@ -63,6 +58,42 @@ func validate(profile: Variant, definitions: Dictionary) -> String:
 		if not areas.has(id):
 			return "クリア履歴のエリアIDがありません: " + str(id)
 	return ""
+
+## One generated equipment instance (inventory or shop stock); "" when valid.
+func validate_item(item: Variant, bases: Dictionary, affixes: Dictionary) -> String:
+	if not item is Dictionary or not item.get("instance_id") is String or item.instance_id.is_empty() or not bases.has(item.get("base_id")) or not item.get("affixes") is Array or item.get("rarity") not in EquipmentGenerator.RARITIES:
+		return "装備個体の形式／基底IDが不正です"
+	if item.has("name") and (not item.name is String or item.name.strip_edges().is_empty() or item.name.length() > 160):
+		return "装備品の名前が不正です"
+	if item.get("generation_version") != 1 and item.get("generation_version") != 2:
+		return "装備生成バージョンが不正です"
+	var counts: Array = EquipmentGenerator.COUNTS[item.rarity] if item.generation_version == 2 else [["common", "magic", "rare"].find(item.rarity)]
+	if item.affixes.size() not in counts:
+		return "装備等級とアフィックス個数が一致しません"
+	if item.generation_version == 2:
+		if not EquipmentGenerator.valid_number(item.get("item_level"), 1, 999) or float(item.item_level) != floor(float(item.item_level)) or not item.get("base_bonuses") is Dictionary:
+			return "装備レベル／基礎値が不正です"
+		for stat: Variant in item.base_bonuses:
+			if stat not in DefinitionRepository.STATS or not EquipmentGenerator.valid_number(item.base_bonuses[stat], 0, 1000000000) or float(item.base_bonuses[stat]) != floor(float(item.base_bonuses[stat])):
+				return "装備基礎値が不正です"
+	var seen_affixes: Dictionary = {}
+	for affix: Variant in item.affixes:
+		if not affix is Dictionary or not affixes.has(affix.get("id")) or affix.get("stat") not in DefinitionRepository.STATS or not (affix.get("value") is int or affix.get("value") is float):
+			return "装備アフィックスが不正です"
+		if seen_affixes.has(affix.id) or not is_finite(float(affix.value)) or affix.value < 0 or affix.value > 1000000000 or floor(float(affix.value)) != float(affix.value):
+			return "アフィックスの重複／値が不正です"
+		seen_affixes[affix.id] = true
+	return ""
+
+## JSON numbers load as floats; restore validated integral fields without rerolling.
+func normalize_item(item: Dictionary) -> void:
+	item.generation_version = int(item.generation_version)
+	if item.has("item_level"):
+		item.item_level = int(item.item_level)
+	for stat: String in item.get("base_bonuses", {}):
+		item.base_bonuses[stat] = int(item.base_bonuses[stat])
+	for affix: Dictionary in item.affixes:
+		affix.value = int(affix.value)
 
 func read_profile(definitions: Dictionary) -> Dictionary:
 	error = ""
@@ -90,24 +121,25 @@ func read_profile(definitions: Dictionary) -> Dictionary:
 	for stat: String in profile.base:
 		profile.base[stat] = int(profile.base[stat])
 	for item: Dictionary in profile.inventory:
-		item.generation_version = int(item.generation_version)
-		if item.has("item_level"):
-			item.item_level = int(item.item_level)
-		for stat: String in item.get("base_bonuses", {}):
-			item.base_bonuses[stat] = int(item.base_bonuses[stat])
-		for affix: Dictionary in item.affixes:
-			affix.value = int(affix.value)
+		normalize_item(item)
+	for offer: Dictionary in profile.shop.stock:
+		offer.price = int(offer.price)
+		normalize_item(offer.item)
 	var effective := Progression.stats(profile, definitions)
 	profile["hp"] = int(effective.max_hp)
 	profile["mp"] = int(effective.max_mp)
 	return profile
 
 func migrate(raw: Variant, definitions: Dictionary) -> Dictionary:
-	if not raw is Dictionary or (raw.get("save_version") != 1 and raw.get("save_version") != 2):
+	var version: Variant = raw.get("save_version") if raw is Dictionary else null
+	# Compare explicitly: JSON loads numbers as floats.
+	if version != 1 and version != 2 and version != VERSION:
 		return {"ok": false, "error": "セーブ形式／save_versionが不正です"}
 	var profile: Dictionary = raw.duplicate(true)
-	if profile.save_version == 2:
+	if profile.save_version == VERSION:
 		return {"ok": true, "profile": profile}
+	if profile.save_version == 2:
+		return {"ok": true, "profile": upgrade_to_v3(profile)}
 	if not profile.get("inventory") is Array or not profile.get("equipped") is Dictionary:
 		return {"ok": false, "error": "旧セーブの装備形式が不正です"}
 	var bases := DefinitionRepository.new().indexed("items", definitions)
@@ -129,7 +161,15 @@ func migrate(raw: Variant, definitions: Dictionary) -> Dictionary:
 		equipment[slot] = id
 	profile.equipped = equipment
 	profile.save_version = 2
-	return {"ok": true, "profile": profile}
+	return {"ok": true, "profile": upgrade_to_v3(profile)}
+
+## Version 3 adds the home-base background and the persisted shop stock.
+## An empty stock is restocked by the game when the save is loaded.
+func upgrade_to_v3(profile: Dictionary) -> Dictionary:
+	profile["hub_background"] = HubActions.BACKGROUNDS[0].id
+	profile["shop"] = {"stock": []}
+	profile.save_version = VERSION
+	return profile
 
 func save(profile: Dictionary, definitions: Dictionary) -> bool:
 	if write_blocked:

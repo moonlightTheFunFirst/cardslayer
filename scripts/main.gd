@@ -13,8 +13,10 @@ var reward_claim: Dictionary = {}
 var reward_result: Dictionary = {}
 var loot_rng := RandomNumberGenerator.new()
 var battle_rng := RandomNumberGenerator.new()
+var shop_rng := RandomNumberGenerator.new()
 var page: VBoxContainer
 var battle_view: BattleView
+var hub_view: HubView
 var sound := Sound.new()
 var editor: DefinitionEditor
 var is_test: bool = false
@@ -44,6 +46,7 @@ func _ready() -> void:
 	margin.add_child(page)
 	loot_rng.randomize()
 	battle_rng.randomize()
+	shop_rng.randomize()
 	var smoke_requested: bool = "--smoke" in OS.get_cmdline_user_args() and ProjectSettings.get_setting("cardslayer/development_enabled", true)
 	if not repository.initialize("user://smoke/data_v2" if smoke_requested else ""):
 		label("定義データを読み込めません。元ファイルは保持しています。")
@@ -132,8 +135,10 @@ func show_screen(next: String) -> void:
 		child.queue_free()
 	if next != "battle":
 		clear_battle_view()
-	# The battle view covers the whole window; the form pages live in the margin.
-	(page.get_parent() as Control).visible = next != "battle"
+	if next not in HubView.PAGES:
+		clear_hub_view()
+	# Battle and home-base views cover the whole window; form pages live in the margin.
+	(page.get_parent() as Control).visible = next != "battle" and next not in HubView.PAGES
 	update_music()
 	if not notice.is_empty():
 		label(notice)
@@ -145,11 +150,17 @@ func show_screen(next: String) -> void:
 		button("新しいシードで再試行", func() -> void:
 			test_config.seed = randi()
 			start_test(test_config, test_area), bar)
+	if next in HubView.PAGES:
+		hub_screen(next)
+		return
 	match screen:
 		"title": title_screen()
-		"hub": hub_screen()
-		"deck": deck_screen()
-		"equipment": equipment_screen()
+		"debug_hub": debug_hub_screen()
+		"debug_status": debug_status_screen()
+		"debug_cards": debug_cards_screen()
+		"debug_deck": debug_deck_screen()
+		"debug_equipment": debug_equipment_screen()
+		"debug_shop": debug_shop_screen()
 		"map": map_screen()
 		"battle": battle_screen()
 		"reward": reward_screen()
@@ -169,8 +180,12 @@ func title_screen() -> void:
 			show_screen("title")
 		else:
 			snapshot = repository.data.duplicate(true)
+			if Shop.stock(profile).is_empty():
+				# Saves migrated from version 2 have no stock yet.
+				Shop.restock(profile, snapshot, shop_rng)
+				persist()
 			show_screen("hub"), page, not FileAccess.file_exists(saves.path))
-	if ProjectSettings.get_setting("cardslayer/development_enabled", true):
+	if dev_enabled():
 		button("総合エディタ", open_editor)
 		button("装備品ジェネレーター", func() -> void:
 			open_editor()
@@ -185,6 +200,7 @@ func new_game() -> void:
 		return
 	snapshot = repository.data.duplicate(true)
 	profile = Progression.new_player(snapshot)
+	Shop.restock(profile, snapshot, shop_rng)
 	notice = ""
 	persist()
 	show_screen("hub")
@@ -193,76 +209,147 @@ func persist() -> void:
 	if not is_test and not saves.save(profile, snapshot):
 		notice = saves.error
 
-func stats_text(values: Dictionary) -> String:
-	return "HP %d / MP %d / 力 %d / 知恵 %d / 敏捷 %d / 運 %d" % [values.max_hp, values.max_mp, values.strength, values.wisdom, values.agility, values.luck]
+func dev_enabled() -> bool:
+	return ProjectSettings.get_setting("cardslayer/development_enabled", true)
 
-func hub_screen() -> void:
-	label("拠点 — 探索者のアジト", page, 32)
-	label("Lv %d  EXP %d / %d  Gold %d" % [profile.level, profile.xp, profile.level * 30, profile.gold])
-	label("基礎: " + stats_text(profile.base))
-	label("装備込み: " + stats_text(Progression.stats(profile, snapshot)))
-	label("初クリア済み: " + ", ".join(profile.cleared))
-	var controls := row()
-	button("デッキ編集 (%d枚)" % profile.deck.size(), func() -> void: show_screen("deck"), controls)
-	button("装備編集", func() -> void: show_screen("equipment"), controls)
+# ------------------------------------------------------------------ home base (real screens)
+
+func hub_screen(next: String) -> void:
+	if hub_view == null:
+		hub_view = HubView.new()
+		add_child(hub_view)
+		hub_view.setup(profile, snapshot, sound, {"test": is_test, "dev": dev_enabled()})
+		hub_view.navigate.connect(show_screen)
+		hub_view.depart_requested.connect(depart)
+		hub_view.editor_requested.connect(editor_shortcut)
+		hub_view.debug_requested.connect(func() -> void: show_screen("debug_" + hub_view.page))
+		hub_view.title_requested.connect(func() -> void: show_screen("title"))
+		hub_view.profile_changed.connect(persist)
+	hub_view.show_page(next)
+	if not notice.is_empty():
+		hub_view.notify(notice)
+
+func clear_hub_view() -> void:
+	if hub_view != null:
+		remove_child(hub_view)
+		hub_view.queue_free()
+		hub_view = null
+
+# ------------------------------------------------------------------ home base (debug menu)
+# Same actions as HubView via HubActions / Shop. Change both UIs together.
+
+func debug_header(title: String, real_page: String) -> void:
+	label("デバッグメニュー — " + title, page, 28)
+	var bar := row()
+	if real_page != "hub":
+		button("◀ デバッグメニューへ", func() -> void: show_screen("debug_hub"), bar)
+	button("実画面で表示", func() -> void: show_screen(real_page), bar)
+
+func debug_hub_screen() -> void:
+	debug_header("本拠地", "hub")
+	for line: String in HubActions.status_lines(profile, snapshot):
+		label(line)
+	var controls := HFlowContainer.new()
+	page.add_child(controls)
+	button("主人公の状態", func() -> void: show_screen("debug_status"), controls)
+	button("カード一覧", func() -> void: show_screen("debug_cards"), controls)
+	button("デッキ編集 (%d枚)" % profile.deck.size(), func() -> void: show_screen("debug_deck"), controls)
+	button("装備編集", func() -> void: show_screen("debug_equipment"), controls)
+	button("ショップ", func() -> void: show_screen("debug_shop"), controls)
 	button("出撃", depart, controls)
-	if not is_test and ProjectSettings.get_setting("cardslayer/development_enabled", true):
-		button("開発メニュー／総合エディタ", open_editor, controls)
+	if not is_test and dev_enabled():
+		button("総合エディタ", open_editor, controls)
 	if not is_test:
 		button("タイトル", func() -> void: show_screen("title"), controls)
+	var backgrounds := row()
+	label("背景: ", backgrounds)
+	for entry: Dictionary in HubActions.BACKGROUNDS:
+		var id: String = entry.id
+		button(entry.name, func() -> void:
+			HubActions.set_background(profile, id)
+			persist()
+			show_screen("debug_hub"), backgrounds, profile.hub_background == id)
 	label("敏捷・運は表示と装備条件のみ。戦闘ボーナス・抽選補正は未実装。")
 
-func deck_screen() -> void:
-	label("デッキ編集 — %d / 20～30枚（各種類10枚まで）" % profile.deck.size(), page, 28)
-	button("拠点へ戻る", func() -> void: persist(); show_screen("hub"), page, profile.deck.size() < 20)
+func debug_status_screen() -> void:
+	debug_header("主人公の状態", "status")
+	for line: String in HubActions.status_lines(profile, snapshot):
+		label(line)
+	for slot: String in EquipmentGenerator.SLOTS:
+		var item := HubActions.equipped_item(profile, slot)
+		var line := label("%s: %s" % [UiText.name_for(slot), HubActions.item_title(item, snapshot) if not item.is_empty() else "なし"])
+		if not item.is_empty():
+			line.add_theme_color_override("font_color", EquipmentGenerator.COLORS[item.rarity])
+
+func debug_cards_screen() -> void:
+	debug_header("カード一覧", "cards")
 	var list := scroll_column()
 	for card: Dictionary in repository.records("cards", snapshot):
 		var line := row(list)
 		var preview := CardView.new()
 		preview.configure(card)
 		line.add_child(preview)
-		label("%d 枚" % profile.deck.count(card.id), line)
+		label("デッキ %d 枚" % profile.deck.count(card.id), line)
+
+func debug_deck_screen() -> void:
+	debug_header("デッキ編集 — %d / %d～%d枚（各種類%d枚まで）" % [profile.deck.size(), HubActions.DECK_MIN, HubActions.DECK_MAX, HubActions.COPIES_MAX], "deck")
+	var list := scroll_column()
+	for card: Dictionary in repository.records("cards", snapshot):
+		var line := row(list)
+		var preview := CardView.new()
+		preview.configure(card)
+		line.add_child(preview)
+		var id: String = card.id
+		label("%d 枚" % profile.deck.count(id), line)
+		var add_reason := HubActions.add_card_reason(profile, id)
 		button("＋", func() -> void:
-			profile.deck.append(card.id)
-			persist(); show_screen("deck"), line, profile.deck.size() >= 30 or profile.deck.count(card.id) >= 10)
+			if HubActions.add_card(profile, id):
+				persist()
+			show_screen("debug_deck"), line, not add_reason.is_empty()).tooltip_text = add_reason
+		var remove_reason := HubActions.remove_card_reason(profile, id)
 		button("−", func() -> void:
-			profile.deck.erase(card.id)
-			persist(); show_screen("deck"), line, profile.deck.count(card.id) == 0 or profile.deck.size() <= 20)
+			if HubActions.remove_card(profile, id):
+				persist()
+			show_screen("debug_deck"), line, not remove_reason.is_empty()).tooltip_text = remove_reason
 
-func item_text(item: Dictionary) -> String:
-	var base: Dictionary = repository.indexed("items", snapshot)[item.base_id]
-	var parts: Array[String] = []
-	for affix: Dictionary in item.affixes:
-		parts.append("%s +%d" % [UiText.name_for(affix.stat), affix.value])
-	return "%s [%s] Lv.%d %s / 基底: %s\n基礎補正: %s / 追加: %s" % [item.get("name", base.name), UiText.name_for(item.rarity), item.get("item_level", base.level), UiText.name_for(base.slot), base.name, UiText.bonuses(item.get("base_bonuses", base.bonuses)), "、".join(parts) if not parts.is_empty() else "なし"]
-
-func equipment_screen() -> void:
-	label("装備 — 基礎能力で装備条件を判定", page, 28)
-	label("現在: " + stats_text(Progression.stats(profile, snapshot)))
+func debug_equipment_screen() -> void:
+	debug_header("装備 — 基礎能力で装備条件を判定", "equipment")
+	label("現在: " + HubActions.stats_text(Progression.stats(profile, snapshot)))
 	var controls := HFlowContainer.new()
 	page.add_child(controls)
-	button("拠点へ戻る", func() -> void: show_screen("hub"), controls)
 	for slot: String in EquipmentGenerator.SLOTS:
 		button(UiText.name_for(slot) + " を外す", func() -> void:
-			profile.equipped.erase(slot)
-			clamp_profile(); persist(); show_screen("equipment"), controls, not profile.equipped.has(slot))
+			if HubActions.unequip(profile, slot, snapshot):
+				persist()
+			show_screen("debug_equipment"), controls, not profile.equipped.has(slot))
 	var list := scroll_column()
 	if profile.inventory.is_empty():
-		label("戦闘に勝つと装備が1個手に入ります。", list)
+		label("戦闘に勝つかショップで購入すると装備が手に入ります。", list)
 	for item: Dictionary in profile.inventory:
-		var base: Dictionary = repository.indexed("items", snapshot)[item.base_id]
-		label(item_text(item), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[item.rarity])
-		var comparison := profile.duplicate(true)
-		Progression.equip(comparison, item, snapshot)
-		label("装備後: " + stats_text(Progression.stats(comparison, snapshot)) + " / 必要Lv %s %s" % [base.level, UiText.bonuses(base.requirements)], list)
-		button("装備中" if item.instance_id in profile.equipped.values() else "装備する", func() -> void:
-			Progression.equip(profile, item, snapshot)
-			clamp_profile(); persist(); show_screen("equipment"), list, not Progression.can_equip_instance(profile, item, base) or item.instance_id in profile.equipped.values())
+		label(HubActions.item_text(item, snapshot), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[item.rarity])
+		label("装備後: " + HubActions.stats_text(HubActions.preview_equip(profile, item, snapshot)) + " / " + HubActions.requirement_text(item, snapshot), list)
+		var reason := HubActions.equip_reason(profile, item, snapshot)
+		button("装備中" if HubActions.is_equipped(profile, item) else "装備する", func() -> void:
+			if HubActions.equip(profile, item, snapshot):
+				persist()
+			show_screen("debug_equipment"), list, not reason.is_empty()).tooltip_text = reason
 
-func clamp_profile() -> void:
-	var stats := Progression.stats(profile, snapshot)
-	profile.hp = mini(int(profile.hp), int(stats.max_hp))
-	profile.mp = mini(int(profile.mp), int(stats.max_mp))
+func debug_shop_screen() -> void:
+	debug_header("ショップ", "shop")
+	label("所持金 %d G / 品揃えは出撃から帰還するたびに入れ替わります" % profile.gold)
+	var list := scroll_column()
+	var offers := Shop.stock(profile)
+	if offers.is_empty():
+		label("商品がありません。", list)
+	for i: int in offers.size():
+		var offer: Dictionary = offers[i]
+		label(HubActions.item_text(offer.item, snapshot), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[offer.item.rarity])
+		label("装備後: " + HubActions.stats_text(HubActions.preview_equip(profile, offer.item, snapshot)) + " / " + HubActions.requirement_text(offer.item, snapshot), list)
+		var reason := Shop.buy_reason(profile, i)
+		button("売り切れ" if offer.sold else "購入 %d G" % int(offer.price), func() -> void:
+			if Shop.buy(profile, i):
+				persist()
+			show_screen("debug_shop"), list, not reason.is_empty()).tooltip_text = reason
 
 func depart() -> void:
 	if not repository.reload():
@@ -279,7 +366,7 @@ func depart() -> void:
 	node_id = repository.indexed("areas", snapshot)[area_id].start
 	passed.clear()
 	passed.append(node_id)
-	clamp_profile()
+	HubActions.clamp_profile(profile, snapshot)
 	show_screen("map")
 
 func area_node(id: String) -> Dictionary:
@@ -302,8 +389,8 @@ func map_screen() -> void:
 			node_id = next
 			passed.append(next)
 			start_battle(area_node(next).enemies), choices)
-	button("撤退", retreat)
-	if not is_test and ProjectSettings.get_setting("cardslayer/development_enabled", true):
+	button("本拠地へ帰還", retreat)
+	if not is_test and dev_enabled():
 		button("開発メニュー", open_editor)
 
 func start_battle(enemy_ids: Array) -> void:
@@ -388,7 +475,7 @@ func after_action() -> void:
 func reward_screen() -> void:
 	label("勝利 — 報酬確定", page, 36)
 	label("EXP +%s  Gold +%s  レベルアップ +%s" % [reward_result.xp, reward_result.gold, reward_result.levels])
-	label(item_text(reward_result.item)).add_theme_color_override("font_color", EquipmentGenerator.COLORS[reward_result.item.rarity])
+	label(HubActions.item_text(reward_result.item, snapshot)).add_theme_color_override("font_color", EquipmentGenerator.COLORS[reward_result.item.rarity])
 	button("次へ", func() -> void:
 		if area_id.is_empty() or node_id == repository.indexed("areas", snapshot)[area_id].boss:
 			return_hub()
@@ -396,7 +483,7 @@ func reward_screen() -> void:
 			show_screen("map"))
 
 func retreat() -> void:
-	confirm("撤退して拠点へ戻りますか？確定済みの報酬は保持します。出撃進行は失われます。", return_hub)
+	confirm("本拠地へ帰還しますか？確定済みの報酬は保持します。出撃進行は失われます。", return_hub)
 
 func return_hub() -> void:
 	area_id = ""
@@ -406,6 +493,8 @@ func return_hub() -> void:
 	profile.hp = int(stats.max_hp)
 	profile.mp = int(stats.max_mp)
 	battle = null
+	# The shop gets new goods every time an expedition ends.
+	Shop.restock(profile, snapshot, shop_rng)
 	persist()
 	show_screen("hub")
 
@@ -421,6 +510,7 @@ func confirm(text: String, action: Callable) -> void:
 
 func open_editor() -> void:
 	clear_battle_view()
+	clear_hub_view()
 	paused = {"profile": profile, "snapshot": snapshot, "battle": battle, "screen": screen, "area_id": area_id, "node_id": node_id, "passed": passed.duplicate(), "claim": reward_claim, "reward": reward_result, "loot_state": loot_rng.state, "battle_state": battle_rng.state, "notice": notice}
 	page.hide()
 	editor = DefinitionEditor.new()
@@ -491,6 +581,7 @@ func start_test(settings: Dictionary, area_test: bool) -> void:
 func return_editor() -> void:
 	is_test = false
 	clear_battle_view()
+	clear_hub_view()
 	battle = null
 	page.hide()
 	editor.show()
