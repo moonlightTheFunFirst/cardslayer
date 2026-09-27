@@ -22,7 +22,7 @@ func setup(repo: DefinitionRepository) -> void:
 	repository = repo
 	draft = repo.data.duplicate(true)
 	var profile := Progression.new_player(draft)
-	test_settings = {"seed": 12345, "hp": 60, "base": profile.base, "deck": profile.deck, "enemies": [repo.records("enemies")[0].id], "equipment": [], "area": repo.records("areas")[0].id}
+	test_settings = {"seed": 12345, "hp": 60, "base": profile.base, "deck": profile.deck, "enemies": [repo.records("enemies")[0].id], "equipment": [], "area": repo.records("areas")[0].id, "consumables": ItemRunner.settings(draft).starter.duplicate()}
 	build()
 
 func label_at(parent: Node, value: String) -> Label:
@@ -61,7 +61,7 @@ func build() -> void:
 	button_at(toolbar, "編集終了", func() -> void: guard_change(func() -> void: exit_requested.emit()))
 	var tabs := HFlowContainer.new()
 	add_child(tabs)
-	var names := ["カード", "敵", "装備", "アフィックス", "エリア", "計算式", "ルール", "テスト設定", "装備ジェネレーター"]
+	var names := ["カード", "敵", "装備", "アフィックス", "エリア", "計算式", "ルール", "消費アイテム", "テスト設定", "装備ジェネレーター"]
 	var groups: Array = DefinitionRepository.GROUPS.duplicate()
 	groups.append("test")
 	groups.append("generator")
@@ -153,6 +153,8 @@ func refresh() -> void:
 			for node: Dictionary in record.nodes:
 				label_at(detail, "%s → %s" % [node.id, ", ".join(node.next)])
 			button_at(detail, "このエリアを試遊対象に設定", func() -> void: test_settings.area = selected_id)
+		if group == "consumables":
+			consumable_tools(record)
 		if group == "formulas":
 			var inputs: Dictionary = {"base": 6, "scaling": 0.5, "strength": 5, "wisdom": 5, "agility": 5, "luck": 5, "max_hp": 60, "max_mp": 10}
 			label_at(detail, "サンプル入力")
@@ -174,7 +176,7 @@ func refresh_preserving_scroll() -> void:
 func options_for(key: String) -> Array:
 	match key:
 		"type": return DefinitionRepository.EFFECTS
-		"target": return ["self", "selected_enemy", "all_enemies", "player"]
+		"target": return ItemRunner.TARGETS if group == "consumables" else ["self", "selected_enemy", "all_enemies", "player"]
 		"category": return ["attack", "support", "buff"]
 		"slot": return EquipmentGenerator.SLOTS
 		"stat": return DefinitionRepository.STATS
@@ -184,6 +186,13 @@ func options_for(key: String) -> Array:
 		"deck", "starter_deck": return repository.indexed("cards", draft).keys()
 		"equipment", "loot_bases": return repository.indexed("items", draft).keys()
 		"area": return repository.indexed("areas", draft).keys()
+		"consumables", "starter": return repository.indexed("consumables", draft).keys()
+		"kind": return ItemRunner.KINDS
+		"conditions": return ItemRunner.CONDITIONS
+		"scene": return ItemRunner.SCENES
+		"icon": return ItemRunner.ICONS
+		"sound": return ItemRunner.SOUNDS
+		"animation": return ItemRunner.ANIMATIONS
 		"start", "boss", "next":
 			var result: Array = []
 			for node: Dictionary in current_record().get("nodes", []):
@@ -203,6 +212,18 @@ func form(parent: Node, object: Dictionary, path: String) -> void:
 			form(parent, value, path + "/" + key)
 		elif value is Array:
 			array_form(parent, value, key, path)
+		elif key == "script" and group == "consumables":
+			script_form(parent, object)
+		elif key == "effect_color" and group == "consumables":
+			var row := HBoxContainer.new()
+			parent.add_child(row)
+			label_at(row, UiText.name_for(key)).custom_minimum_size.x = 140
+			var picker := ColorPickerButton.new()
+			picker.color = Color.html(str(value)) if Color.html_is_valid(str(value)) else Color.WHITE
+			picker.edit_alpha = false
+			picker.custom_minimum_size = Vector2(120, 32)
+			row.add_child(picker)
+			picker.color_changed.connect(func(color: Color) -> void: object[key] = color.to_html(false); changed())
 		else:
 			var row := HBoxContainer.new()
 			parent.add_child(row)
@@ -272,6 +293,7 @@ func array_form(parent: Node, values: Array, key: String, path: String) -> void:
 			"effects": values.append({"type": "damage", "target": "selected_enemy", "value": 1, "scaling": 0.0, "formula_id": "", "stat": "strength"})
 			"actions": values.append({"name": "新しい行動", "effects": [{"type": "damage", "target": "player", "value": 1, "scaling": 0.0, "formula_id": "", "stat": "strength"}]})
 			"nodes": values.append({"id": "node_" + str(values.size()), "enemies": [], "next": []})
+			"basic_effects": values.append({"kind": "heal", "min": 1, "max": 1, "stat": "strength"})
 			_:
 				var choices := options_for(key)
 				if not choices.is_empty():
@@ -372,6 +394,7 @@ func launch_test(area_test: bool) -> void:
 	var issues: Array[String] = []
 	repository.check_refs(settings.enemies, repository.indexed("enemies"), "test/enemies", issues)
 	repository.check_refs(settings.equipment, repository.indexed("items"), "test/equipment", issues)
+	repository.check_refs(settings.get("consumables", []), repository.indexed("consumables"), "test/consumables", issues)
 	var used_slots: Dictionary = {}
 	for id: String in settings.equipment:
 		if not repository.indexed("items").has(id):
@@ -416,3 +439,67 @@ func export_data() -> void:
 func _exit_tree() -> void:
 	if is_instance_valid(generator_panel) and generator_panel.get_parent() == null:
 		generator_panel.free()
+
+# ------------------------------------------------------------------ consumables
+
+func script_form(parent: Node, object: Dictionary) -> void:
+	label_at(parent, "効果スクリプト（空欄なら上の使用条件と基本効果をそのまま使用）")
+	var code := CodeEdit.new()
+	code.text = str(object.script)
+	code.custom_minimum_size = Vector2(0, 220)
+	code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code.gutters_draw_line_numbers = true
+	code.indent_use_spaces = false
+	parent.add_child(code)
+	code.text_changed.connect(func() -> void:
+		object.script = code.text
+		changed())
+
+func consumable_tools(record: Dictionary) -> void:
+	var api := label_at(detail, "スクリプトで使えるctx: in_battle() hp() max_hp() mp() max_mp() stat(名前) bad_statuses() has_target() target_hp() rand_int(a,b)\n  heal(n) restore_mp(n) add_block(n) add_stat(\"strength\",n) reduce_damage(n) cure(\"poison\") cure_random() damage_target(n) damage_all(n) draw(n) message(文字)\n  basic_reason()=選択した使用条件の判定 / apply_basic()=選択した基本効果の実行")
+	api.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var tools := HFlowContainer.new()
+	detail.add_child(tools)
+	var result := label_at(detail, "")
+	result.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button_at(tools, "テンプレートを挿入", func() -> void:
+		if str(record.script).strip_edges().is_empty():
+			record.script = ItemRunner.TEMPLATE
+			changed()
+			refresh_preserving_scroll())
+	button_at(tools, "検証", func() -> void:
+		var issues := ItemRunner.validate(record)
+		result.text = "問題なし" if issues.is_empty() else "\n".join(issues))
+	button_at(tools, "試用シミュレーション", func() -> void: result.text = simulate_consumable(record))
+
+## Runs the item in a throwaway battle built from the test settings (hero at
+## half HP and poisoned so recovery and cure items can be tried).
+func simulate_consumable(record: Dictionary) -> String:
+	var issues := ItemRunner.validate(record)
+	if not issues.is_empty():
+		return "検証エラー:\n" + "\n".join(issues)
+	var engine := BattleEngine.new()
+	var base: Dictionary = test_settings.base
+	engine.setup(draft, base, int(base.max_hp) / 2, test_settings.deck, test_settings.enemies, int(test_settings.seed), [record.id])
+	engine.player.poison = 3
+	engine.player.mp = int(base.max_mp) / 2
+	var before := "HP %d/%d MP %d 毒 %d / 敵HP %d" % [engine.player.hp, base.max_hp, engine.player.mp, engine.player.poison, engine.enemies[0].hp]
+	var reason := engine.item_reason(0, 0)
+	var lines: Array[String] = ["戦闘（英雄HP半分・毒3・敵1体目を対象）", "使用前: " + before]
+	if not reason.is_empty():
+		lines.append("使用不可: " + reason)
+	else:
+		var log_start := engine.log.size()
+		engine.use_item(0, 0)
+		lines.append_array(engine.log.slice(log_start))
+		lines.append("使用後: HP %d MP %d 毒 %d ブロック %d 軽減 %d 強化 %s / 敵HP %d" % [engine.player.hp, engine.player.mp, engine.player.poison, engine.player.block, engine.player.reduction, UiText.bonuses(engine.player.buffs), engine.enemies[0].hp])
+	var hero := Progression.new_player(draft)
+	hero.base = base.duplicate(true)
+	hero.hp = int(base.max_hp) / 2
+	hero.consumables = {record.id: 1}
+	hero.loadout = [record.id]
+	var field_rng := RandomNumberGenerator.new()
+	field_rng.seed = int(test_settings.seed)
+	var field := HubActions.use_field_item(hero, draft, record.id, field_rng)
+	lines.append("マップ（HP半分）: " + (HubActions.item_summary(field.results) if field.ok else "使用不可: " + field.reason))
+	return "\n".join(lines)

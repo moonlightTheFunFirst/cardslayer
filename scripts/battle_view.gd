@@ -9,6 +9,7 @@ signal action_finished
 signal editor_requested
 signal retreat_requested
 signal retry_requested(new_seed: bool)
+signal item_used(id: String)
 
 const SCREEN := Vector2(1280, 720)
 const GROUND_Y: float = 496.0
@@ -54,6 +55,12 @@ var banner_label: Label
 var toast: Label
 var tip_panel: PanelContainer
 var tip_label: Label
+var belt: HBoxContainer
+var item_buttons: Array[Button] = []
+## Belt slot being aimed at an enemy (like a held attack card), or -1.
+var held_item: int = -1
+## True while an item's events replay; the item's own SE replaces per-effect SE.
+var item_active: bool = false
 
 func setup(battle: BattleEngine, audio: Sound, context: Dictionary) -> void:
 	engine = battle
@@ -130,6 +137,9 @@ func build_hud() -> void:
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(info_label)
+	belt = HBoxContainer.new()
+	belt.add_theme_constant_override("separation", 2)
+	row.add_child(belt)
 	if info.get("test", false):
 		make_button("同じ条件で再試行", func() -> void: retry_requested.emit(false), row)
 		make_button("新しいシードで再試行", func() -> void: retry_requested.emit(true), row)
@@ -240,6 +250,7 @@ func sync() -> void:
 		reconcile_hand()
 	refresh_cards()
 	layout_hand()
+	refresh_belt()
 	log_label.text = "\n".join(engine.log.slice(maxi(0, engine.log.size() - 60)))
 	if not engine.fault.is_empty():
 		toast.text = "数式エラーで停止: %s — エディタで修正してください" % engine.fault
@@ -273,8 +284,43 @@ func update_intents() -> void:
 		for effect: Dictionary in action.effects:
 			var evaluated := engine.effect_value(effect, enemy)
 			var shown: bool = effect.type in ["damage", "block", "heal", "apply_poison", "restore_mp"]
-			parts.append({"type": effect.type, "value": str(evaluated.value) if shown and evaluated.ok else ""})
+			var value: int = int(evaluated.value) if evaluated.ok else 0
+			if effect.type == "damage" and effect.target == "player":
+				value = maxi(0, value - int(engine.player.get("reduction", 0)))
+			parts.append({"type": effect.type, "value": str(value) if shown and evaluated.ok else ""})
 		foes[i].set_intent(parts, "次の行動: " + engine.intent(enemy))
+
+func refresh_belt() -> void:
+	for button: Button in item_buttons:
+		button.queue_free()
+	item_buttons.clear()
+	for slot: int in engine.items.size():
+		var item := engine.item_definition(slot)
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(40, 36)
+		button.expand_icon = true
+		button.add_theme_stylebox_override("normal", style("res://assets/ui/button.png"))
+		button.add_theme_stylebox_override("hover", style("res://assets/ui/button_hover.png"))
+		button.add_theme_stylebox_override("pressed", style("res://assets/ui/button_hover.png"))
+		button.add_theme_stylebox_override("disabled", style("res://assets/ui/button_end_disabled.png"))
+		button.add_theme_constant_override("icon_max_width", 32)
+		if item.is_empty():
+			button.disabled = true
+			button.tooltip_text = "使用済み"
+			button.modulate = Color(1, 1, 1, 0.35)
+		else:
+			button.icon = texture_or_null(ItemRunner.icon_path(item))
+			var reason: String = engine.item_reason(slot, -1, false) if player_turn() else "現在は使用できません"
+			button.disabled = not reason.is_empty()
+			button.modulate = Color.WHITE if reason.is_empty() else Color(0.55, 0.55, 0.6)
+			button.tooltip_text = "%s\n%s%s" % [item.name, item.description, "\n使用不可: " + reason if not reason.is_empty() else ("\n敵を選んで使用" if engine.item_needs_target(slot) else "\nクリックで使用")]
+			var index := slot
+			button.pressed.connect(func() -> void: pick_item(index))
+		if slot == held_item:
+			button.modulate = Color(1.4, 1.3, 0.8)
+		belt.add_child(button)
+		item_buttons.append(button)
 
 func reconcile_hand() -> void:
 	var matches: bool = cards.size() == engine.hand.size()
@@ -368,7 +414,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			press_pos = event.position
 			mouse = event.position
-			if held >= 0:
+			if held_item >= 0:
+				var slot := held_item
+				var target := enemy_at(mouse)
+				cancel_held_item()
+				if target >= 0:
+					use_item(slot, target)
+			elif held >= 0:
 				resolve_held()
 			else:
 				var i := card_at(event.position)
@@ -382,8 +434,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				resolve_held()
 			get_viewport().set_input_as_handled()
 	elif (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT) or event.is_action_pressed("ui_cancel"):
-		if held >= 0:
+		if held >= 0 or held_item >= 0:
 			cancel_held()
+			cancel_held_item()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var key: int = event.keycode
@@ -436,7 +489,36 @@ func resolve_held() -> void:
 	if other >= 0 and other != i:
 		pick(other)
 
+func pick_item(slot: int) -> void:
+	if not player_turn():
+		return
+	cancel_held()
+	if engine.item_needs_target(slot):
+		held_item = slot
+		sound.play("card_select", 0.0)
+		refresh_belt()
+		on_motion()
+	else:
+		use_item(slot, -1)
+
+func cancel_held_item() -> void:
+	if held_item < 0:
+		return
+	held_item = -1
+	aim_target = -1
+	for foe: BattleActor in foes:
+		foe.set_targeted(false)
+	refresh_belt()
+	arrow.queue_redraw()
+
 func on_motion() -> void:
+	if held_item >= 0:
+		aim_target = enemy_at(mouse)
+		for foe_index: int in foes.size():
+			foes[foe_index].set_targeted(foe_index == aim_target)
+		arrow.queue_redraw()
+		tip_panel.visible = false
+		return
 	if held >= 0 and held < cards.size():
 		if needs_target(held):
 			aim_target = enemy_at(mouse)
@@ -476,6 +558,8 @@ func show_actor_tip() -> void:
 		lines.append("ブロック %d: 次の被ダメージを軽減（自分のターン開始時に消える）" % int(state.block))
 	if int(state.get("poison", 0)) > 0:
 		lines.append("毒 %d: ターン開始時にダメージを受け、1減る" % int(state.poison))
+	if int(state.get("reduction", 0)) > 0:
+		lines.append("被ダメージ軽減 %d（戦闘中）" % int(state.reduction))
 	var buffs: Dictionary = state.get("buffs", {})
 	for stat: String in buffs:
 		lines.append("%s %+d（戦闘中）" % [UiText.name_for(stat), int(buffs[stat])])
@@ -487,9 +571,11 @@ func show_actor_tip() -> void:
 	tip_panel.position = Vector2(at.x, clampf(at.y, 52, 400))
 
 func draw_arrow() -> void:
-	if held < 0 or not needs_target(held):
-		return
 	var start := AIM_CENTER - Vector2(0, BattleCard.SIZE.y / 2 + 6)
+	if held_item >= 0 and held_item < item_buttons.size():
+		start = item_buttons[held_item].get_global_rect().get_center() + Vector2(0, 24)
+	elif held < 0 or not needs_target(held):
+		return
 	var control := Vector2(start.x, mouse.y - 40)
 	var color := Color("ffd84a") if aim_target >= 0 else Color("f4ead8")
 	var previous := start
@@ -521,10 +607,22 @@ func play_card(i: int, target: int) -> void:
 		notify_after = true
 		run(engine.events)
 
+func use_item(slot: int, target: int) -> void:
+	var reason := engine.item_reason(slot, target)
+	if not reason.is_empty():
+		deny(reason)
+		return
+	var id: String = engine.items[slot]
+	if engine.use_item(slot, target):
+		item_used.emit(id)
+		notify_after = true
+		run(engine.events)
+
 func end_turn() -> void:
 	if not player_turn():
 		return
 	cancel_held()
+	cancel_held_item()
 	hovered = -1
 	engine.end_turn()
 	notify_after = true
@@ -562,6 +660,7 @@ func step() -> void:
 
 func finish() -> void:
 	sync()
+	item_active = false
 	if not engine.outcome.is_empty():
 		if finishing:
 			return
@@ -604,6 +703,11 @@ func handle(ev: Dictionary) -> float:
 			return 0.16
 		"effect":
 			return on_effect(ev)
+		"item":
+			return on_item(ev)
+		"message":
+			popup(hero, str(ev.text), Color("e0d0ff"), 24, Vector2(0, -60))
+			return 0.55
 		"phase":
 			var target := actor(int(ev.target))
 			target.apply_state(ev.state)
@@ -632,6 +736,28 @@ func handle(ev: Dictionary) -> float:
 			show_banner("ターン %d" % int(ev.turn), Color("a0e0ff"), 0.3)
 			return 0.6
 	return 0.0
+
+func on_item(ev: Dictionary) -> float:
+	var item: Dictionary = engine.consumables.get(ev.id, {})
+	item_active = true
+	lunged = true
+	last_group = -1
+	refresh_belt()
+	var color := Color.html(str(item.get("effect_color", "ffffff"))) if Color.html_is_valid(str(item.get("effect_color", ""))) else Color.WHITE
+	var target: BattleActor = foes[int(ev.target)] if int(ev.target) >= 0 and int(ev.target) < foes.size() else hero
+	sound.play("item_use", 0.0)
+	sound.play(str(item.get("sound", "item_use")))
+	popup(hero, str(item.get("name", "")), color, 24, Vector2(0, -80))
+	match str(item.get("animation", "none")):
+		"sparkle": sparkle(target, color)
+		"burst": burst(target, color, 14)
+		"pulse": target.pulse(Color(color.r * 1.8, color.g * 1.8, color.b * 1.8))
+	return 0.45
+
+## Sound for an effect, muted while an item plays its own sound.
+func effect_sound(name: String) -> void:
+	if not item_active:
+		sound.play(name)
 
 func on_effect(ev: Dictionary) -> float:
 	var target := actor(int(ev.target))
@@ -666,26 +792,34 @@ func on_effect(ev: Dictionary) -> float:
 				if dealt >= 12:
 					shake(clampf(dealt / 2.0, 6.0, 16.0))
 		"block":
-			sound.play("block")
+			effect_sound("block")
 			popup(target, "+%d" % amount, Color("8ac8ff"), 28)
 			target.pulse(Color(0.7, 0.9, 1.8))
 		"heal":
-			sound.play("heal")
+			effect_sound("heal")
 			popup(target, "+%d" % amount, Color("7aff8a"), 30)
 			target.pulse(Color(0.8, 1.8, 0.8))
 			burst(target, Color("a0ffa0"), 8)
 		"restore_mp":
-			sound.play("mp")
+			effect_sound("mp")
 			popup(target, "MP +%d" % amount, Color("9ad0ff"), 26)
 			target.pulse(Color(0.8, 0.9, 1.8))
 		"apply_poison":
-			sound.play("poison")
+			effect_sound("poison")
 			popup(target, "毒 +%d" % amount, Color("8aff6a"), 24, Vector2(0, -30))
 			target.pulse(Color(0.8, 1.6, 0.6))
 		"modify_stat":
-			sound.play("buff")
+			effect_sound("buff")
 			popup(target, "%s +%d" % [UiText.name_for(str(ev.stat)), amount], Color("ffd070"), 26)
 			target.pulse(Color(1.8, 1.5, 0.7))
+		"reduce_damage":
+			effect_sound("block")
+			popup(target, "被ダメ -%d" % amount, Color("8ac8ff"), 24)
+			target.pulse(Color(0.7, 0.9, 1.8))
+		"cure":
+			effect_sound("heal")
+			popup(target, "%s 解除" % UiText.name_for(str(ev.stat)), Color("fff0a0"), 24)
+			sparkle(target, Color("fff0a0"))
 		"draw":
 			pass
 	target.apply_state(ev.state)
@@ -750,6 +884,25 @@ func popup(target: BattleActor, text: String, color: Color, font_size: int, offs
 	tween.tween_property(label, "position:y", label.position.y - 70, 0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.chain().tween_property(label, "modulate:a", 0.0, 0.3)
 	tween.chain().tween_callback(label.queue_free)
+
+## Pixels rising from the target's feet.
+func sparkle(target: BattleActor, color: Color) -> void:
+	for i: int in 14:
+		var bit := ColorRect.new()
+		var pixel: float = [6.0, 8.0][i % 2]
+		bit.size = Vector2(pixel, pixel)
+		bit.color = color if i % 3 else Color.WHITE
+		var start := target.position + Vector2(randf_range(0.1, 0.9) * target.size.x, target.size.y - randf_range(0, 30))
+		bit.position = start
+		bit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bit.modulate.a = 0.0
+		fx.add_child(bit)
+		var tween := bit.create_tween()
+		tween.tween_interval(i * 0.03)
+		tween.tween_property(bit, "modulate:a", 1.0, 0.05)
+		tween.parallel().tween_property(bit, "position:y", start.y - randf_range(90, 170), 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(bit, "modulate:a", 0.0, 0.2)
+		tween.tween_callback(bit.queue_free)
 
 func burst(target: BattleActor, color: Color, count: int) -> void:
 	var center := target.position + target.size * Vector2(0.5, 0.45)

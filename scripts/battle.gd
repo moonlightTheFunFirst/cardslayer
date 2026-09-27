@@ -1,6 +1,9 @@
 class_name BattleEngine
 extends RefCounted
 
+## Actor fields that count as bad statuses (cured by e.g. 万能薬).
+const BAD_STATUSES: Array[String] = ["poison"]
+
 var definitions: Dictionary
 var models: DefinitionModels
 var cards: Dictionary
@@ -22,11 +25,20 @@ var busy: bool = false
 # view replays it as animations; game logic never reads it.
 var events: Array[Dictionary] = []
 var effect_group: int = 0
+## Carried consumable ids by belt slot; "" once used.
+var items: Array = []
+var used_items: Array[String] = []
+var consumables: Dictionary = {}
+## Separate stream so item rolls never shift the deck shuffle.
+var item_rng := RandomNumberGenerator.new()
 
-func setup(snapshot: Dictionary, stats: Dictionary, current_hp: int, deck_ids: Array, enemy_ids: Array, seed_value: int) -> void:
+func setup(snapshot: Dictionary, stats: Dictionary, current_hp: int, deck_ids: Array, enemy_ids: Array, seed_value: int, carried: Array = []) -> void:
 	definitions = snapshot.duplicate(true)
 	models = DefinitionModels.new(definitions)
 	var repo := DefinitionRepository.new()
+	consumables = repo.indexed("consumables", definitions)
+	items = carried.duplicate()
+	item_rng.seed = seed_value + 7919
 	cards = repo.indexed("cards", definitions)
 	formulas = repo.indexed("formulas", definitions)
 	rules = repo.indexed("rules", definitions).combat
@@ -51,7 +63,7 @@ func setup(snapshot: Dictionary, stats: Dictionary, current_hp: int, deck_ids: A
 	check_outcome()
 
 func actor(id: String, actor_name: String, stats: Dictionary, hp: int) -> Dictionary:
-	return {"id": id, "name": actor_name, "stats": stats.duplicate(true), "buffs": {}, "hp": clampi(hp, 0, int(stats.max_hp)), "mp": int(stats.max_mp), "block": 0, "poison": 0}
+	return {"id": id, "name": actor_name, "stats": stats.duplicate(true), "buffs": {}, "hp": clampi(hp, 0, int(stats.max_hp)), "mp": int(stats.max_mp), "block": 0, "poison": 0, "reduction": 0}
 
 func effective(who: Dictionary) -> Dictionary:
 	var result: Dictionary = who.stats.duplicate()
@@ -82,7 +94,7 @@ func actor_index(who: Dictionary) -> int:
 	return -2
 
 func state_of(who: Dictionary) -> Dictionary:
-	return {"hp": who.hp, "max_hp": int(effective(who).max_hp), "block": who.block, "poison": who.poison, "buffs": who.buffs.duplicate(), "mp": who.mp}
+	return {"hp": who.hp, "max_hp": int(effective(who).max_hp), "block": who.block, "poison": who.poison, "reduction": int(who.get("reduction", 0)), "buffs": who.buffs.duplicate(), "mp": who.mp}
 
 func needs_target(card: Dictionary) -> bool:
 	for effect: Dictionary in card.effects:
@@ -145,24 +157,82 @@ func resolve(effects: Array, source: Dictionary, selected: int) -> void:
 				log.append("数式エラー: " + fault)
 				return
 			var amount: int = int(evaluated.value)
-			var absorbed: int = 0
 			if not str(effect.get("formula_id", "")).is_empty():
 				log.append("式 %s inputs=%s → %d" % [effect.formula_id, str(evaluated.inputs), amount])
-			match effect.type:
-				"damage":
-					absorbed = mini(int(target.block), amount)
-					target.block -= absorbed
-					target.hp = maxi(0, int(target.hp) - amount + absorbed)
-				"block": target.block += amount
-				"heal": target.hp = mini(int(effective(target).max_hp), int(target.hp) + amount)
-				"restore_mp": target.mp = mini(int(effective(target).max_mp), int(target.mp) + amount)
-				"draw":
-					if target == player:
-						draw(amount)
-				"apply_poison": target.poison += amount
-				"modify_stat": target.buffs[effect.stat] = target.buffs.get(effect.stat, 0) + amount
-			log.append("%s → %s %s %d" % [source.name, target.name, UiText.name_for(effect.type), amount])
-			record("effect", {"type": effect.type, "source": actor_index(source), "target": actor_index(target), "amount": amount, "absorbed": absorbed, "group": effect_group, "stat": str(effect.get("stat", "")), "magic": str(effect.get("formula_id", "")).contains("magic"), "state": state_of(target)})
+			apply_effect(effect.type, amount, source, target, str(effect.get("stat", "")), str(effect.get("formula_id", "")).contains("magic"))
+
+## Applies one resolved effect and records it for the battle view. Shared by
+## cards, enemy actions and consumables.
+func apply_effect(type: String, amount: int, source: Dictionary, target: Dictionary, stat: String = "", magic: bool = false) -> void:
+	var absorbed: int = 0
+	match type:
+		"damage":
+			amount = maxi(0, amount - int(target.get("reduction", 0)))
+			absorbed = mini(int(target.block), amount)
+			target.block -= absorbed
+			target.hp = maxi(0, int(target.hp) - amount + absorbed)
+		"block": target.block += amount
+		"heal": target.hp = mini(int(effective(target).max_hp), int(target.hp) + amount)
+		"restore_mp": target.mp = mini(int(effective(target).max_mp), int(target.mp) + amount)
+		"draw":
+			if is_same(target, player):
+				draw(amount)
+		"apply_poison": target.poison += amount
+		"modify_stat": target.buffs[stat] = target.buffs.get(stat, 0) + amount
+		"reduce_damage": target.reduction = int(target.get("reduction", 0)) + amount
+		"cure":
+			amount = int(target.get(stat, 0))
+			target[stat] = 0
+	var label: String = UiText.name_for(stat) + " " + UiText.name_for(type) if type == "cure" else UiText.name_for(type)
+	log.append("%s → %s %s %d" % [source.name, target.name, label, amount])
+	record("effect", {"type": type, "source": actor_index(source), "target": actor_index(target), "amount": amount, "absorbed": absorbed, "group": effect_group, "stat": stat, "magic": magic, "state": state_of(target)})
+
+## Consumable effect on target, attributed to the player.
+func item_effect(type: String, amount: int, target: Dictionary, stat: String = "", new_group: bool = true) -> void:
+	if new_group:
+		effect_group += 1
+	apply_effect(type, amount, player, target, stat)
+
+# ------------------------------------------------------------------ consumables
+
+func item_definition(slot: int) -> Dictionary:
+	if slot < 0 or slot >= items.size() or str(items[slot]).is_empty():
+		return {}
+	return consumables.get(items[slot], {})
+
+func item_needs_target(slot: int) -> bool:
+	return item_definition(slot).get("target", "self") == "selected_enemy"
+
+## "" when the item in slot can be used now, otherwise the reason.
+func item_reason(slot: int, target: int = -1, check_target: bool = true) -> String:
+	if busy or not outcome.is_empty() or not fault.is_empty():
+		return "現在は使用できません"
+	var item := item_definition(slot)
+	if item.is_empty():
+		return "アイテムがありません"
+	if item_needs_target(slot) and not check_target:
+		# Aiming happens after picking the item; only check the target-free conditions.
+		for i: int in enemies.size():
+			if int(enemies[i].hp) > 0:
+				return ItemRunner.can_use(item, ItemContext.for_battle(self, item, i))
+		return "対象の敵がいません"
+	return ItemRunner.can_use(item, ItemContext.for_battle(self, item, target))
+
+func use_item(slot: int, target: int = -1) -> bool:
+	if not item_reason(slot, target).is_empty():
+		return false
+	busy = true
+	events.clear()
+	var item := item_definition(slot)
+	var id: String = items[slot]
+	items[slot] = ""
+	used_items.append(id)
+	record("item", {"id": id, "slot": slot, "target": target})
+	log.append("アイテム: " + str(item.name))
+	ItemRunner.use(item, ItemContext.for_battle(self, item, target))
+	check_outcome()
+	busy = false
+	return true
 
 func effect_value(effect: Dictionary, source: Dictionary) -> Dictionary:
 	return BattleEngine.evaluate_effect(effect, effective(source), formulas)

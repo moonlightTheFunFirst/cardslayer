@@ -474,6 +474,7 @@
     {
       "id": "shop",
       "equipment_count": 4,
+      "consumable_count": 3,
       "level_offset": 0,
       "price_base": 20,
       "price_per_level": 6,
@@ -491,6 +492,14 @@
         "legendary": 8,
         "unique": 10
       }
+    },
+    {
+      "id": "items",
+      "carry_limit": 3,
+      "starter": [
+        "herb",
+        "herb"
+      ]
     }
   ]
 }

@@ -31,7 +31,10 @@ func run() -> void:
 		await wait(0.2)
 		await shot("hub-" + background)
 	HubActions.set_background(app.profile, "camp")
-	for hub_page: String in ["status", "cards", "deck", "equipment", "shop"]:
+	HubActions.gain_item(app.profile, "power_pill", 2)
+	HubActions.gain_item(app.profile, "thunder_vial")
+	HubActions.load_item(app.profile, app.snapshot, "thunder_vial")
+	for hub_page: String in ["status", "cards", "deck", "equipment", "items", "shop"]:
 		app.show_screen(hub_page)
 		await wait(0.3)
 		await shot("hub-" + hub_page)
@@ -74,8 +77,21 @@ func run() -> void:
 	app.start_battle(["warden"])
 	await wait(2.2)
 	await shot("battle-boss")
+	app.battle.player.hp = 30
+	app.battle.player.poison = 2
+	view = app.battle_view
+	view.sync()
+	view.use_item(0, -1)
+	await wait(0.35)
+	await shot("battle-item")
+	await wait(1.5)
 	app.open_editor()
 	await shot("editor")
+	app.editor.group = "consumables"
+	app.editor.selected_id = "fate_dice"
+	app.editor.refresh()
+	await wait(0.2)
+	await shot("editor-consumables")
 	for group: String in DefinitionRepository.GROUPS:
 		app.editor.group = group
 		app.editor.selected_id = app.repository.records(group)[0].id

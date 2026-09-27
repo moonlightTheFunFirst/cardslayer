@@ -13,8 +13,8 @@ signal title_requested
 signal profile_changed
 
 const SCREEN := Vector2(1280, 720)
-const PAGES: Array[String] = ["hub", "status", "cards", "deck", "equipment", "shop"]
-const TITLES: Dictionary = {"hub": "本拠地", "status": "主人公の状態", "cards": "カード一覧", "deck": "デッキ編集", "equipment": "装備", "shop": "ショップ"}
+const PAGES: Array[String] = ["hub", "status", "cards", "deck", "equipment", "items", "shop"]
+const TITLES: Dictionary = {"hub": "本拠地", "status": "主人公の状態", "cards": "カード一覧", "deck": "デッキ編集", "equipment": "装備", "items": "持ち物", "shop": "ショップ"}
 const STAT_ORDER: Array[String] = ["max_hp", "max_mp", "strength", "wisdom", "agility", "luck"]
 
 var profile: Dictionary
@@ -74,6 +74,7 @@ func refresh() -> void:
 		"cards": build_cards(false)
 		"deck": build_cards(true)
 		"equipment": build_equipment()
+		"items": build_items()
 		"shop": build_shop()
 	if scroll != null:
 		scroll.set_deferred("scroll_vertical", saved_scroll)
@@ -178,6 +179,7 @@ func build_home() -> void:
 		["装備", func() -> void: navigate.emit("equipment"), false],
 		["カード一覧", func() -> void: navigate.emit("cards"), false],
 		["主人公の状態", func() -> void: navigate.emit("status"), false],
+		["持ち物", func() -> void: navigate.emit("items"), false],
 		["ショップ", func() -> void: navigate.emit("shop"), false],
 		["背景: %s ▶" % HubActions.background_name(str(profile.hub_background)), func() -> void:
 			HubActions.next_background(profile)
@@ -349,7 +351,7 @@ func build_shop() -> void:
 		list.add_child(PixelUi.label("商品がありません。", 16))
 	for i: int in offers.size():
 		var offer: Dictionary = offers[i]
-		var box := item_block(list, offer.item)
+		var box := consumable_block(list, HubActions.consumable(snapshot, offer.id), "所持 %d" % HubActions.owned(profile, offer.id)) if offer.kind == "consumable" else item_block(list, offer.item)
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_END
 		box.add_child(row)
@@ -358,8 +360,65 @@ func build_shop() -> void:
 		var buy := PixelUi.button("売り切れ" if offer.sold else "購入", func() -> void:
 			if Shop.buy(profile, i):
 				sound.play("buff", 0.0)
-				changed("%s を購入しました" % HubActions.item_title(offer.item, snapshot)), row, sound, not offer.sold)
+				changed("%s を購入しました" % (HubActions.consumable(snapshot, offer.id).name if offer.kind == "consumable" else HubActions.item_title(offer.item, snapshot))), row, sound, not offer.sold)
 		buy.disabled = not reason.is_empty()
 		buy.tooltip_text = reason
 		if offer.sold:
 			box.modulate = Color(1, 1, 1, 0.5)
+
+func consumable_block(parent: Node, item: Dictionary, note: String) -> VBoxContainer:
+	var frame := PixelUi.panel(parent)
+	var box := VBoxContainer.new()
+	frame.add_child(box)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	box.add_child(head)
+	var icon := BattleCard.pixel_rect(PixelUi.texture(ItemRunner.icon_path(item)), Vector2.ZERO, 2)
+	icon.custom_minimum_size = Vector2(32, 32)
+	head.add_child(icon)
+	var title := PixelUi.label("%s   %s" % [item.name, note], 17, Color("ffe8b0"), 3)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	box.add_child(PixelUi.label("%s\n使用場面: %s / 対象: %s" % [item.description, UiText.name_for(item.scene), UiText.name_for(item.target)], 14, Color("f4ead8"), 0, true, true))
+	return box
+
+func build_items() -> void:
+	var body := sheet(Rect2(40, 56, 1200, 650))
+	var limit := ItemRunner.carry_limit(snapshot)
+	body.add_child(PixelUi.label("持ち込み %d / %d個（出撃時に持っていく消費アイテム。戦闘中は上部バー、マップではボタンから使用）" % [profile.loadout.size(), limit], 16, Color("f4ead8"), 0, true, true))
+	var slots := HBoxContainer.new()
+	slots.add_theme_constant_override("separation", 8)
+	body.add_child(slots)
+	for i: int in maxi(limit, profile.loadout.size()):
+		var slot := PixelUi.panel(slots)
+		slot.custom_minimum_size = Vector2(170, 64)
+		var inner := HBoxContainer.new()
+		slot.add_child(inner)
+		if i >= profile.loadout.size():
+			inner.add_child(PixelUi.label("空き", 15, Color("8a8090")))
+			continue
+		var item := HubActions.consumable(snapshot, profile.loadout[i])
+		var icon := BattleCard.pixel_rect(PixelUi.texture(ItemRunner.icon_path(item)), Vector2.ZERO, 2)
+		icon.custom_minimum_size = Vector2(32, 32)
+		inner.add_child(icon)
+		inner.add_child(PixelUi.label(str(item.name), 15, Color("ffe8b0") if i < limit else Color("ff8a8a")))
+		var index := i
+		PixelUi.button("外す", func() -> void:
+			if HubActions.unload_item(profile, index):
+				changed(), inner, sound)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 6)
+	scroll_body(body).add_child(list)
+	if profile.consumables.is_empty():
+		list.add_child(PixelUi.label("消費アイテムを持っていません。ショップで購入できます。", 15, Color("f4ead8"), 0, true, true))
+	for id: String in profile.consumables:
+		var item := HubActions.consumable(snapshot, id)
+		var box := consumable_block(list, item, "×%d（持ち込み %d）" % [HubActions.owned(profile, id), profile.loadout.count(id)])
+		var reason := HubActions.load_reason(profile, snapshot, id)
+		var carry := PixelUi.button("持ち込む", func() -> void:
+			if HubActions.load_item(profile, snapshot, id):
+				changed(), box, sound)
+		carry.size_flags_horizontal = Control.SIZE_SHRINK_END
+		carry.disabled = not reason.is_empty()
+		carry.tooltip_text = reason

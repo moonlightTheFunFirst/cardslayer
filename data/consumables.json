@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "herb",
+      "name": "薬草",
+      "description": "HPを7～20回復する。",
+      "price": 15,
+      "shop_weight": 100,
+      "icon": "herb",
+      "sound": "heal",
+      "animation": "sparkle",
+      "effect_color": "7aff8a",
+      "scene": "anywhere",
+      "target": "self",
+      "conditions": [
+        "hp_not_full"
+      ],
+      "basic_effects": [
+        {
+          "kind": "heal",
+          "min": 7,
+          "max": 20,
+          "stat": "strength"
+        }
+      ],
+      "script": ""
+    },
+    {
+      "id": "panacea",
+      "name": "万能薬",
+      "description": "バッドステータスを1つ解除する（複数ならランダム）。",
+      "price": 25,
+      "shop_weight": 60,
+      "icon": "elixir",
+      "sound": "cure",
+      "animation": "sparkle",
+      "effect_color": "fff0a0",
+      "scene": "battle",
+      "target": "self",
+      "conditions": [
+        "has_bad_status"
+      ],
+      "basic_effects": [
+        {
+          "kind": "cure_bad_status",
+          "min": 1,
+          "max": 1,
+          "stat": "strength"
+        }
+      ],
+      "script": ""
+    },
+    {
+      "id": "power_pill",
+      "name": "パワー丸",
+      "description": "この戦闘中、力が3上がる。",
+      "price": 30,
+      "shop_weight": 50,
+      "icon": "power",
+      "sound": "buff",
+      "animation": "pulse",
+      "effect_color": "ff8a5a",
+      "scene": "battle",
+      "target": "self",
+      "conditions": [],
+      "basic_effects": [
+        {
+          "kind": "modify_stat",
+          "min": 3,
+          "max": 3,
+          "stat": "strength"
+        }
+      ],
+      "script": ""
+    },
+    {
+      "id": "defense_pill",
+      "name": "ディフェンス丸",
+      "description": "この戦闘中、受けるダメージが3減る。",
+      "price": 30,
+      "shop_weight": 50,
+      "icon": "defense",
+      "sound": "block",
+      "animation": "pulse",
+      "effect_color": "8ac8ff",
+      "scene": "battle",
+      "target": "self",
+      "conditions": [],
+      "basic_effects": [
+        {
+          "kind": "reduce_damage",
+          "min": 3,
+          "max": 3,
+          "stat": "strength"
+        }
+      ],
+      "script": ""
+    },
+    {
+      "id": "thunder_vial",
+      "name": "雷の小瓶",
+      "description": "選んだ敵に12～18ダメージ。",
+      "price": 40,
+      "shop_weight": 30,
+      "icon": "vial",
+      "sound": "magic",
+      "animation": "burst",
+      "effect_color": "ffe070",
+      "scene": "battle",
+      "target": "selected_enemy",
+      "conditions": [],
+      "basic_effects": [
+        {
+          "kind": "damage",
+          "min": 12,
+          "max": 18,
+          "stat": "strength"
+        }
+      ],
+      "script": ""
+    },
+    {
+      "id": "fate_dice",
+      "name": "運命のサイコロ",
+      "description": "出目で効果が変わる。1-2:HP回復5 3-4:ブロック8 5:力+2 6:敵全体に15ダメージ",
+      "price": 35,
+      "shop_weight": 25,
+      "icon": "dice",
+      "sound": "magic",
+      "animation": "burst",
+      "effect_color": "c0a0ff",
+      "scene": "battle",
+      "target": "self",
+      "conditions": [],
+      "basic_effects": [],
+      "script": "func can_use(ctx):\n\treturn ctx.basic_reason()\n\nfunc use(ctx):\n\tvar roll = ctx.rand_int(1, 6)\n\tctx.message(\"出目 %d\" % roll)\n\tif roll <= 2:\n\t\tctx.heal(5)\n\telif roll <= 4:\n\t\tctx.add_block(8)\n\telif roll == 5:\n\t\tctx.add_stat(\"strength\", 2)\n\telse:\n\t\tctx.damage_all(15)\n"
+    }
+  ]
+}

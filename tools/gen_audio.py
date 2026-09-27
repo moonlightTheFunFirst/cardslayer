@@ -293,6 +293,9 @@ def se_all():
     d_notes = [("E5", 0.3), ("D#5", 0.3), ("D5", 0.3), ("C#5", 1.2)]
     s["defeat"] = mix(concat(*[pulse(freq(n), d, 0.5, decay=0.2, sustain=0.5, release=0.1) for n, d in d_notes]) * 0.22,
                       concat(*[triangle(freq(n[:-1] + "3"), d, sustain=0.8) for n, d in d_notes]) * 0.35)
+    # Added later: keep at the end so earlier sounds keep their noise samples.
+    s["item_use"] = concat(sweep(300, 900, 0.05, "square", 0.03) * 0.2, noise(0.08, 0.03, 2) * 0.3, arpeggio(["C5", "G5"], 0.05, triangle, decay=0.04, sustain=0.4) * 0.3)
+    s["cure"] = mix(arpeggio(["E5", "G#5", "B5", "E6", "G#6"], 0.05, pulse, duty=0.125, decay=0.04, sustain=0.5) * 0.28, noise(0.3, 0.12, 6) * 0.1)
     return s
 
 

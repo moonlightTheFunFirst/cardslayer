@@ -7,6 +7,7 @@ extends RefCounted
 const DEFAULTS: Dictionary = {
 	"id": "shop",
 	"equipment_count": 4,
+	"consumable_count": 3,
 	"level_offset": 0,
 	"price_base": 20,
 	"price_per_level": 6,
@@ -26,7 +27,7 @@ static func settings(snapshot: Dictionary) -> Dictionary:
 static func validate(entry: Dictionary) -> Array[String]:
 	var issues: Array[String] = []
 	var path := "rules/shop"
-	for field: Array in [["equipment_count", 0, 12], ["level_offset", -50, 50], ["price_base", 0, 1000000], ["price_per_level", 0, 1000000]]:
+	for field: Array in [["equipment_count", 0, 12], ["consumable_count", 0, 12], ["level_offset", -50, 50], ["price_base", 0, 1000000], ["price_per_level", 0, 1000000]]:
 		var value: Variant = entry.get(field[0], DEFAULTS[field[0]])
 		if not EquipmentGenerator.valid_number(value, field[1], field[2]) or floor(float(value)) != float(value):
 			issues.append("%s/%s: 整数 %d～%d が必要" % [path, field[0], field[1], field[2]])
@@ -67,6 +68,17 @@ static func restock(profile: Dictionary, snapshot: Dictionary, rng: RandomNumber
 		var item: Dictionary = generated.item
 		item["instance_id"] = "shop_%x_%x_%d" % [rng.randi(), rng.randi(), i]
 		stock.append({"kind": "equipment", "item": item, "price": price(item, config), "sold": false})
+	# Consumables come after equipment so their rolls never change the equipment stock.
+	var goods: Array = []
+	var goods_weights: Array = []
+	for entry: Dictionary in DefinitionRepository.new().records("consumables", snapshot):
+		if float(entry.shop_weight) > 0:
+			goods.append(entry)
+			goods_weights.append(float(entry.shop_weight))
+	if not goods.is_empty():
+		for i: int in int(config.consumable_count):
+			var good: Dictionary = Progression.weighted(goods, goods_weights, rng)
+			stock.append({"kind": "consumable", "id": good.id, "price": int(good.price), "sold": false})
 	profile["shop"] = {"stock": stock}
 
 static func stock(profile: Dictionary) -> Array:
@@ -89,5 +101,8 @@ static func buy(profile: Dictionary, index: int) -> bool:
 	var offer: Dictionary = stock(profile)[index]
 	profile.gold = int(profile.gold) - int(offer.price)
 	offer.sold = true
-	profile.inventory.append(offer.item.duplicate(true))
+	if offer.kind == "consumable":
+		HubActions.gain_item(profile, offer.id)
+	else:
+		profile.inventory.append(offer.item.duplicate(true))
 	return true

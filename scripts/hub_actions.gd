@@ -103,6 +103,79 @@ static func equipped_item(profile: Dictionary, slot: String) -> Dictionary:
 			return item
 	return {}
 
+# ---------------------------------------------------------------- consumables
+
+const ITEM_STACK_MAX: int = 99
+
+static func owned(profile: Dictionary, id: String) -> int:
+	return int(profile.get("consumables", {}).get(id, 0))
+
+static func gain_item(profile: Dictionary, id: String, amount: int = 1) -> void:
+	profile.consumables[id] = mini(ITEM_STACK_MAX, owned(profile, id) + amount)
+
+## Removes one used item from both the stock and the carried loadout.
+static func consume_item(profile: Dictionary, id: String) -> void:
+	if owned(profile, id) <= 0:
+		return
+	profile.consumables[id] = owned(profile, id) - 1
+	if profile.consumables[id] <= 0:
+		profile.consumables.erase(id)
+	profile.loadout.erase(id)
+
+static func load_reason(profile: Dictionary, snapshot: Dictionary, id: String) -> String:
+	var limit := ItemRunner.carry_limit(snapshot)
+	if profile.loadout.size() >= limit:
+		return "持ち込みは%d個までです" % limit
+	if profile.loadout.count(id) >= owned(profile, id):
+		return "所持数が足りません"
+	return ""
+
+static func load_item(profile: Dictionary, snapshot: Dictionary, id: String) -> bool:
+	if not load_reason(profile, snapshot, id).is_empty():
+		return false
+	profile.loadout.append(id)
+	return true
+
+static func unload_item(profile: Dictionary, index: int) -> bool:
+	if index < 0 or index >= profile.loadout.size():
+		return false
+	profile.loadout.remove_at(index)
+	return true
+
+## Items actually taken into battle (the loadout may exceed a lowered limit).
+static func carried(profile: Dictionary, snapshot: Dictionary) -> Array:
+	return profile.loadout.slice(0, ItemRunner.carry_limit(snapshot))
+
+static func consumable(snapshot: Dictionary, id: String) -> Dictionary:
+	return DefinitionRepository.new().indexed("consumables", snapshot).get(id, {})
+
+## Out-of-battle use (map) of a carried item: "" when usable.
+static func field_use_reason(profile: Dictionary, snapshot: Dictionary, id: String, rng: RandomNumberGenerator) -> String:
+	if id not in carried(profile, snapshot):
+		return "持ち込んでいません"
+	var item := consumable(snapshot, id)
+	return ItemRunner.can_use(item, ItemContext.for_field(profile, snapshot, item, rng))
+
+## {"ok", "reason", "results"}; consumes the item on success.
+static func use_field_item(profile: Dictionary, snapshot: Dictionary, id: String, rng: RandomNumberGenerator) -> Dictionary:
+	var reason := field_use_reason(profile, snapshot, id, rng)
+	if not reason.is_empty():
+		return {"ok": false, "reason": reason, "results": []}
+	var item := consumable(snapshot, id)
+	var ctx := ItemContext.for_field(profile, snapshot, item, rng)
+	ItemRunner.use(item, ctx)
+	consume_item(profile, id)
+	return {"ok": true, "reason": "", "results": ctx.results}
+
+static func item_summary(results: Array) -> String:
+	var parts: Array[String] = []
+	for result: Dictionary in results:
+		match str(result.type):
+			"heal": parts.append("HP +%d" % int(result.amount))
+			"restore_mp": parts.append("MP +%d" % int(result.amount))
+			"message": parts.append(str(result.text))
+	return "、".join(parts)
+
 # ---------------------------------------------------------------- text
 
 static func stats_text(values: Dictionary) -> String:

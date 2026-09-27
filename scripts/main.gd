@@ -14,6 +14,7 @@ var reward_result: Dictionary = {}
 var loot_rng := RandomNumberGenerator.new()
 var battle_rng := RandomNumberGenerator.new()
 var shop_rng := RandomNumberGenerator.new()
+var item_rng := RandomNumberGenerator.new()
 var page: VBoxContainer
 var battle_view: BattleView
 var hub_view: HubView
@@ -47,6 +48,7 @@ func _ready() -> void:
 	loot_rng.randomize()
 	battle_rng.randomize()
 	shop_rng.randomize()
+	item_rng.randomize()
 	var smoke_requested: bool = "--smoke" in OS.get_cmdline_user_args() and ProjectSettings.get_setting("cardslayer/development_enabled", true)
 	if not repository.initialize("user://smoke/data_v2" if smoke_requested else ""):
 		label("定義データを読み込めません。元ファイルは保持しています。")
@@ -161,6 +163,7 @@ func show_screen(next: String) -> void:
 		"debug_deck": debug_deck_screen()
 		"debug_equipment": debug_equipment_screen()
 		"debug_shop": debug_shop_screen()
+		"debug_items": debug_items_screen()
 		"map": map_screen()
 		"battle": battle_screen()
 		"reward": reward_screen()
@@ -255,6 +258,7 @@ func debug_hub_screen() -> void:
 	button("カード一覧", func() -> void: show_screen("debug_cards"), controls)
 	button("デッキ編集 (%d枚)" % profile.deck.size(), func() -> void: show_screen("debug_deck"), controls)
 	button("装備編集", func() -> void: show_screen("debug_equipment"), controls)
+	button("持ち物", func() -> void: show_screen("debug_items"), controls)
 	button("ショップ", func() -> void: show_screen("debug_shop"), controls)
 	button("出撃", depart, controls)
 	if not is_test and dev_enabled():
@@ -343,13 +347,40 @@ func debug_shop_screen() -> void:
 		label("商品がありません。", list)
 	for i: int in offers.size():
 		var offer: Dictionary = offers[i]
-		label(HubActions.item_text(offer.item, snapshot), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[offer.item.rarity])
-		label("装備後: " + HubActions.stats_text(HubActions.preview_equip(profile, offer.item, snapshot)) + " / " + HubActions.requirement_text(offer.item, snapshot), list)
+		if offer.kind == "consumable":
+			var good := HubActions.consumable(snapshot, offer.id)
+			label("[消費アイテム] %s — %s（所持 %d）" % [good.name, good.description, HubActions.owned(profile, offer.id)], list)
+		else:
+			label(HubActions.item_text(offer.item, snapshot), list).add_theme_color_override("font_color", EquipmentGenerator.COLORS[offer.item.rarity])
+			label("装備後: " + HubActions.stats_text(HubActions.preview_equip(profile, offer.item, snapshot)) + " / " + HubActions.requirement_text(offer.item, snapshot), list)
 		var reason := Shop.buy_reason(profile, i)
 		button("売り切れ" if offer.sold else "購入 %d G" % int(offer.price), func() -> void:
 			if Shop.buy(profile, i):
 				persist()
 			show_screen("debug_shop"), list, not reason.is_empty()).tooltip_text = reason
+
+func debug_items_screen() -> void:
+	debug_header("持ち物（消費アイテム）", "items")
+	label("持ち込み %d / %d個: %s" % [profile.loadout.size(), ItemRunner.carry_limit(snapshot), "、".join(profile.loadout.map(func(id: String) -> String: return HubActions.consumable(snapshot, id).get("name", id))) if not profile.loadout.is_empty() else "なし"])
+	var carried := row()
+	for i: int in profile.loadout.size():
+		var slot := i
+		button("外す: " + str(HubActions.consumable(snapshot, profile.loadout[i]).get("name", "")), func() -> void:
+			if HubActions.unload_item(profile, slot):
+				persist()
+			show_screen("debug_items"), carried)
+	var list := scroll_column()
+	var owned_ids: Array = profile.consumables.keys()
+	if owned_ids.is_empty():
+		label("消費アイテムを持っていません。ショップで購入できます。", list)
+	for id: String in owned_ids:
+		var item := HubActions.consumable(snapshot, id)
+		label("%s ×%d（持ち込み %d） — %s / %s" % [item.name, HubActions.owned(profile, id), profile.loadout.count(id), item.description, UiText.name_for(item.scene)], list)
+		var reason := HubActions.load_reason(profile, snapshot, id)
+		button("持ち込む", func() -> void:
+			if HubActions.load_item(profile, snapshot, id):
+				persist()
+			show_screen("debug_items"), list, not reason.is_empty()).tooltip_text = reason
 
 func depart() -> void:
 	if not repository.reload():
@@ -389,13 +420,27 @@ func map_screen() -> void:
 			node_id = next
 			passed.append(next)
 			start_battle(area_node(next).enemies), choices)
+	var carried: Array = HubActions.carried(profile, snapshot)
+	if not carried.is_empty():
+		var items := row()
+		label("持ち込みアイテム:", items)
+		for id: String in carried.duplicate():
+			var item := HubActions.consumable(snapshot, id)
+			var reason := HubActions.field_use_reason(profile, snapshot, id, item_rng)
+			button("%s を使う" % item.name, func() -> void:
+				var result := HubActions.use_field_item(profile, snapshot, id, item_rng)
+				if result.ok:
+					sound.play(str(item.get("sound", "item_use")))
+					notice = "%s を使用: %s" % [item.name, HubActions.item_summary(result.results)]
+				show_screen("map")
+				notice = "", items, not reason.is_empty()).tooltip_text = item.description + ("\n使用不可: " + reason if not reason.is_empty() else "")
 	button("本拠地へ帰還", retreat)
 	if not is_test and dev_enabled():
 		button("開発メニュー", open_editor)
 
 func start_battle(enemy_ids: Array) -> void:
 	battle = BattleEngine.new()
-	battle.setup(snapshot, Progression.stats(profile, snapshot), int(profile.hp), profile.deck, enemy_ids, battle_rng.randi())
+	battle.setup(snapshot, Progression.stats(profile, snapshot), int(profile.hp), profile.deck, enemy_ids, battle_rng.randi(), HubActions.carried(profile, snapshot))
 	reward_claim = {}
 	reward_result = {}
 	show_screen("battle")
@@ -419,6 +464,7 @@ func battle_screen() -> void:
 	battle_view.action_finished.connect(after_action)
 	battle_view.editor_requested.connect(editor_shortcut)
 	battle_view.retreat_requested.connect(retreat)
+	battle_view.item_used.connect(func(id: String) -> void: HubActions.consume_item(profile, id))
 	battle_view.retry_requested.connect(func(new_seed: bool) -> void:
 		if new_seed:
 			test_config.seed = randi()
@@ -454,6 +500,13 @@ func update_music() -> void:
 		sound.play_bgm("hub")
 
 ## Direct (non-animated) play used by automated checks.
+## Direct (non-animated) item use used by automated checks.
+func use_item(slot: int, target: int) -> void:
+	var id: String = battle.items[slot] if slot >= 0 and slot < battle.items.size() else ""
+	if battle.use_item(slot, target):
+		HubActions.consume_item(profile, id)
+	after_action()
+
 func use_card(index: int, target: int) -> void:
 	battle.play(index, target)
 	after_action()
@@ -555,6 +608,11 @@ func start_test(settings: Dictionary, area_test: bool) -> void:
 	profile.base = settings.base.duplicate(true)
 	profile.deck = settings.deck.duplicate()
 	profile.hp = int(settings.hp)
+	profile.consumables = {}
+	profile.loadout = []
+	for id: String in settings.get("consumables", []):
+		HubActions.gain_item(profile, id)
+		profile.loadout.append(id)
 	var gear_rng := RandomNumberGenerator.new()
 	gear_rng.seed = int(settings.seed) + 2
 	for id: String in settings.equipment:

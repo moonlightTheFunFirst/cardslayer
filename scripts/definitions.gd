@@ -1,7 +1,10 @@
 class_name DefinitionRepository
 extends RefCounted
 
-const GROUPS: Array[String] = ["cards", "enemies", "items", "affixes", "areas", "formulas", "rules"]
+const GROUPS: Array[String] = ["cards", "enemies", "items", "affixes", "areas", "formulas", "rules", "consumables"]
+## Groups added after the first release; copied from the bundled data into
+## an older edit workspace instead of failing to load.
+const ADDED_GROUPS: Array[String] = ["consumables"]
 const STATS: Array[String] = ["max_hp", "max_mp", "strength", "wisdom", "agility", "luck"]
 const EFFECTS: Array[String] = ["damage", "block", "heal", "draw", "restore_mp", "apply_poison", "modify_stat"]
 var root: String = "res://data"
@@ -46,7 +49,10 @@ func reload() -> bool:
 	var incoming: Dictionary = {}
 	errors.clear()
 	for group: String in GROUPS:
-		var file := FileAccess.open(root + "/" + group + ".json", FileAccess.READ)
+		var path := root + "/" + group + ".json"
+		if group in ADDED_GROUPS and root != "res://data" and not FileAccess.file_exists(path):
+			DirAccess.copy_absolute("res://data/" + group + ".json", path)
+		var file := FileAccess.open(path, FileAccess.READ)
 		if file == null:
 			errors.append(group + ": ファイルを開けません")
 			continue
@@ -111,7 +117,7 @@ func validate(source: Dictionary) -> Array[String]:
 		var evaluated := FormulaEvaluator.new().evaluate(entry.expression, sample)
 		if not evaluated.ok:
 			issues.append("formulas/" + entry.id + ": " + evaluated.error)
-	for group: String in ["cards", "enemies", "items", "affixes", "areas"]:
+	for group: String in ["cards", "enemies", "items", "affixes", "areas", "consumables"]:
 		for entry: Dictionary in records(group, source):
 			if not entry.get("name") is String or str(entry.get("name", "")).strip_edges().is_empty():
 				issues.append(group + "/" + entry.id + ": 名前が必要")
@@ -207,6 +213,10 @@ func validate(source: Dictionary) -> Array[String]:
 		issues.append("rules/loot: 新装備抽選の設定がありません。新しい定義データ一式を導入してください。")
 	else:
 		issues.append_array(EquipmentGenerator.validate(indexes.rules.loot, indexes.items, indexes.affixes))
+	for entry: Dictionary in records("consumables", source):
+		issues.append_array(ItemRunner.validate(entry))
+	if indexes.rules.has("items"):
+		issues.append_array(ItemRunner.validate_settings(indexes.rules.items, indexes.consumables))
 	if indexes.rules.has("shop"):
 		issues.append_array(Shop.validate(indexes.rules.shop))
 	return issues

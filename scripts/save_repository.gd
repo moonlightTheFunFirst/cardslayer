@@ -1,7 +1,7 @@
 class_name SaveRepository
 extends RefCounted
 
-const VERSION: int = 3
+const VERSION: int = 4
 
 var path: String = "user://saves/profile.json"
 var error: String = ""
@@ -39,12 +39,26 @@ func validate(profile: Variant, definitions: Dictionary) -> String:
 		if instances.has(item.instance_id):
 			return "装備個体の形式／基底IDが不正です"
 		instances[item.instance_id] = item
+	var consumables := repo.indexed("consumables", definitions)
 	for offer: Variant in profile.shop.stock:
-		if not offer is Dictionary or offer.get("kind") != "equipment" or not offer.get("sold") is bool or not EquipmentGenerator.valid_number(offer.get("price"), 1, 1000000000) or floor(float(offer.price)) != float(offer.price):
+		if not offer is Dictionary or offer.get("kind") not in ["equipment", "consumable"] or not offer.get("sold") is bool or not EquipmentGenerator.valid_number(offer.get("price"), 1, 1000000000) or floor(float(offer.price)) != float(offer.price):
 			return "ショップの商品が不正です"
+		if offer.kind == "consumable":
+			if not consumables.has(offer.get("id")):
+				return "ショップの消費アイテムIDがありません: " + str(offer.get("id"))
+			continue
 		var offer_problem := validate_item(offer.get("item"), bases, affixes)
 		if not offer_problem.is_empty():
 			return "ショップの商品: " + offer_problem
+	if not profile.get("consumables") is Dictionary or not profile.get("loadout") is Array:
+		return "消費アイテムの形式が不正です"
+	for id: Variant in profile.consumables:
+		var count: Variant = profile.consumables[id]
+		if not consumables.has(id) or not EquipmentGenerator.valid_number(count, 1, HubActions.ITEM_STACK_MAX) or floor(float(count)) != float(count):
+			return "所持消費アイテムが不正です: " + str(id)
+	for id: Variant in profile.loadout:
+		if not id is String or not consumables.has(id) or profile.loadout.count(id) > int(profile.consumables.get(id, 0)):
+			return "持ち込みアイテムが所持数を超えています: " + str(id)
 	for slot: Variant in profile.equipped:
 		if slot not in EquipmentGenerator.SLOTS or not instances.has(profile.equipped[slot]):
 			return "装備中instance_idが不正です"
@@ -124,7 +138,10 @@ func read_profile(definitions: Dictionary) -> Dictionary:
 		normalize_item(item)
 	for offer: Dictionary in profile.shop.stock:
 		offer.price = int(offer.price)
-		normalize_item(offer.item)
+		if offer.kind == "equipment":
+			normalize_item(offer.item)
+	for id: String in profile.consumables:
+		profile.consumables[id] = int(profile.consumables[id])
 	var effective := Progression.stats(profile, definitions)
 	profile["hp"] = int(effective.max_hp)
 	profile["mp"] = int(effective.max_mp)
@@ -133,13 +150,15 @@ func read_profile(definitions: Dictionary) -> Dictionary:
 func migrate(raw: Variant, definitions: Dictionary) -> Dictionary:
 	var version: Variant = raw.get("save_version") if raw is Dictionary else null
 	# Compare explicitly: JSON loads numbers as floats.
-	if version != 1 and version != 2 and version != VERSION:
+	if version != 1 and version != 2 and version != 3 and version != VERSION:
 		return {"ok": false, "error": "セーブ形式／save_versionが不正です"}
 	var profile: Dictionary = raw.duplicate(true)
 	if profile.save_version == VERSION:
 		return {"ok": true, "profile": profile}
+	if profile.save_version == 3:
+		return {"ok": true, "profile": upgrade_to_v4(profile)}
 	if profile.save_version == 2:
-		return {"ok": true, "profile": upgrade_to_v3(profile)}
+		return {"ok": true, "profile": upgrade_to_v4(upgrade_to_v3(profile))}
 	if not profile.get("inventory") is Array or not profile.get("equipped") is Dictionary:
 		return {"ok": false, "error": "旧セーブの装備形式が不正です"}
 	var bases := DefinitionRepository.new().indexed("items", definitions)
@@ -161,13 +180,20 @@ func migrate(raw: Variant, definitions: Dictionary) -> Dictionary:
 		equipment[slot] = id
 	profile.equipped = equipment
 	profile.save_version = 2
-	return {"ok": true, "profile": upgrade_to_v3(profile)}
+	return {"ok": true, "profile": upgrade_to_v4(upgrade_to_v3(profile))}
 
 ## Version 3 adds the home-base background and the persisted shop stock.
 ## An empty stock is restocked by the game when the save is loaded.
 func upgrade_to_v3(profile: Dictionary) -> Dictionary:
 	profile["hub_background"] = HubActions.BACKGROUNDS[0].id
 	profile["shop"] = {"stock": []}
+	profile.save_version = 3
+	return profile
+
+## Version 4 adds owned consumables and the carried loadout (spec ch.20).
+func upgrade_to_v4(profile: Dictionary) -> Dictionary:
+	profile["consumables"] = {}
+	profile["loadout"] = []
 	profile.save_version = VERSION
 	return profile
 

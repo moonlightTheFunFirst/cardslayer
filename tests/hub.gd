@@ -68,7 +68,7 @@ func check_logic(defs: Dictionary) -> void:
 	rng.seed = 77
 	Shop.restock(profile, defs, rng)
 	check(JSON.stringify(profile.shop) == first, "same seed gives the same shop stock")
-	check(Shop.stock(profile).size() == int(config.equipment_count), "stock has the configured number of goods")
+	check(Shop.stock(profile).size() == int(config.equipment_count) + int(config.consumable_count), "stock has the configured number of equipment and consumables")
 	var offer: Dictionary = Shop.stock(profile)[0]
 	check(offer.price == Shop.price(offer.item, config) and offer.price > 0, "price follows level and rarity")
 	check(SaveRepository.new().validate(profile, defs).is_empty(), "profile with shop stock is a valid save")

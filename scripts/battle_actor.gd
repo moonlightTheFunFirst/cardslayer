@@ -129,6 +129,8 @@ func apply_state(values: Dictionary) -> void:
 		child.queue_free()
 	if int(values.poison) > 0:
 		status_row.add_child(status_chip("poison", str(values.poison), "毒: ターン開始時に%dダメージ" % int(values.poison)))
+	if int(values.get("reduction", 0)) > 0:
+		status_row.add_child(status_chip("block", "軽減%d" % int(values.reduction), "被ダメージ -%d（戦闘中）" % int(values.reduction)))
 	var buffs: Dictionary = values.get("buffs", {})
 	for stat: String in buffs:
 		if int(buffs[stat]) != 0:
