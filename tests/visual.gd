@@ -42,7 +42,15 @@ func run() -> void:
 	await shot("debug-shop")
 	app.show_screen("hub")
 	app.depart()
+	app.profile.hp = 42
+	app.passed.append("a")
+	app.node_id = "a"
+	app.show_screen("map")
+	await wait(0.3)
+	app.map_view.show_tip(app.map_view.nodes_by_id().c)
 	await shot("map")
+	app.show_screen("debug_map")
+	await shot("debug-map")
 	app.node_id = "a"
 	app.start_battle(["thorn", "mossling"])
 	app.battle.draw(10)

@@ -18,6 +18,9 @@ var item_rng := RandomNumberGenerator.new()
 var page: VBoxContainer
 var battle_view: BattleView
 var hub_view: HubView
+var map_view: MapView
+## Debug-menu choice of area to depart to ("" = the first area, as in normal play).
+var departure_area: String = ""
 var sound := Sound.new()
 var editor: DefinitionEditor
 var is_test: bool = false
@@ -139,8 +142,10 @@ func show_screen(next: String) -> void:
 		clear_battle_view()
 	if next not in HubView.PAGES:
 		clear_hub_view()
+	if next != "map":
+		clear_map_view()
 	# Battle and home-base views cover the whole window; form pages live in the margin.
-	(page.get_parent() as Control).visible = next != "battle" and next not in HubView.PAGES
+	(page.get_parent() as Control).visible = next not in ["battle", "map"] and next not in HubView.PAGES
 	update_music()
 	if not notice.is_empty():
 		label(notice)
@@ -164,7 +169,8 @@ func show_screen(next: String) -> void:
 		"debug_equipment": debug_equipment_screen()
 		"debug_shop": debug_shop_screen()
 		"debug_items": debug_items_screen()
-		"map": map_screen()
+		"map": map_view_screen()
+		"debug_map": debug_map_screen()
 		"battle": battle_screen()
 		"reward": reward_screen()
 
@@ -232,6 +238,12 @@ func hub_screen(next: String) -> void:
 	if not notice.is_empty():
 		hub_view.notify(notice)
 
+func clear_map_view() -> void:
+	if map_view != null:
+		remove_child(map_view)
+		map_view.queue_free()
+		map_view = null
+
 func clear_hub_view() -> void:
 	if hub_view != null:
 		remove_child(hub_view)
@@ -273,6 +285,22 @@ func debug_hub_screen() -> void:
 			HubActions.set_background(profile, id)
 			persist()
 			show_screen("debug_hub"), backgrounds, profile.hub_background == id)
+	var destinations := row()
+	label("出撃先（デバッグ）: ", destinations)
+	for area: Dictionary in repository.records("areas", snapshot):
+		var id: String = area.id
+		button(area.name, func() -> void:
+			departure_area = id
+			show_screen("debug_hub"), destinations, departure_area_id() == id)
+	var clears := row()
+	label("クリア済み: ", clears)
+	for area: Dictionary in repository.records("areas", snapshot):
+		var id: String = area.id
+		var cleared: bool = id in profile.cleared
+		button("%s: %s" % [area.name, "ON" if cleared else "OFF"], func() -> void:
+			HubActions.set_cleared(profile, id, not cleared)
+			persist()
+			show_screen("debug_hub"), clears)
 	label("敏捷・運は表示と装備条件のみ。戦闘ボーナス・抽選補正は未実装。")
 
 func debug_status_screen() -> void:
@@ -393,12 +421,18 @@ func depart() -> void:
 		show_screen("hub")
 		return
 	snapshot = repository.data.duplicate(true)
-	area_id = repository.records("areas", snapshot)[0].id
+	area_id = departure_area_id()
 	node_id = repository.indexed("areas", snapshot)[area_id].start
 	passed.clear()
 	passed.append(node_id)
 	HubActions.clamp_profile(profile, snapshot)
 	show_screen("map")
+
+## Normal play always departs to the first area; the debug menu may pick another.
+func departure_area_id() -> String:
+	if not departure_area.is_empty() and repository.indexed("areas", snapshot).has(departure_area):
+		return departure_area
+	return repository.records("areas", snapshot)[0].id
 
 func area_node(id: String) -> Dictionary:
 	for node: Dictionary in repository.indexed("areas", snapshot)[area_id].nodes:
@@ -406,9 +440,29 @@ func area_node(id: String) -> Dictionary:
 			return node
 	return {}
 
-func map_screen() -> void:
+func go_to_node(next: String) -> void:
+	node_id = next
+	passed.append(next)
+	start_battle(area_node(next).enemies)
+
+func map_view_screen() -> void:
+	clear_map_view()
+	map_view = MapView.new()
+	add_child(map_view)
+	map_view.setup(profile, snapshot, sound, {"test": is_test, "dev": dev_enabled(), "item_rng": item_rng})
+	map_view.show_area(area_id, node_id, passed)
+	map_view.node_selected.connect(go_to_node)
+	map_view.home_requested.connect(retreat)
+	map_view.editor_requested.connect(editor_shortcut)
+	map_view.debug_requested.connect(func() -> void: show_screen("debug_map"))
+	if not notice.is_empty():
+		map_view.notify(notice)
+
+## Form version of the map (debug menu). Same data and actions as MapView.
+func debug_map_screen() -> void:
 	var area: Dictionary = repository.indexed("areas", snapshot)[area_id]
-	label(area.name + " — 分岐マップ", page, 32)
+	label("デバッグメニュー — %s 分岐マップ" % area.name, page, 28)
+	button("実画面で表示", func() -> void: show_screen("map"))
 	label("現在HP %d / %d  現在地 %s" % [profile.hp, Progression.stats(profile, snapshot).max_hp, node_id])
 	for node: Dictionary in area.nodes:
 		label("%s %s → %s" % ["✓" if node.id in passed else "○", node.id, ", ".join(node.next)])
@@ -416,10 +470,7 @@ func map_screen() -> void:
 	for next: String in area_node(node_id).next:
 		if next in passed:
 			continue
-		button("%s に進む / %s" % [next, ", ".join(area_node(next).enemies)], func() -> void:
-			node_id = next
-			passed.append(next)
-			start_battle(area_node(next).enemies), choices)
+		button("%s に進む / %s" % [next, ", ".join(area_node(next).enemies)], func() -> void: go_to_node(next), choices)
 	var carried: Array = HubActions.carried(profile, snapshot)
 	if not carried.is_empty():
 		var items := row()
@@ -432,7 +483,7 @@ func map_screen() -> void:
 				if result.ok:
 					sound.play(str(item.get("sound", "item_use")))
 					notice = "%s を使用: %s" % [item.name, HubActions.item_summary(result.results)]
-				show_screen("map")
+				show_screen("debug_map")
 				notice = "", items, not reason.is_empty()).tooltip_text = item.description + ("\n使用不可: " + reason if not reason.is_empty() else "")
 	button("本拠地へ帰還", retreat)
 	if not is_test and dev_enabled():
@@ -564,6 +615,7 @@ func confirm(text: String, action: Callable) -> void:
 func open_editor() -> void:
 	clear_battle_view()
 	clear_hub_view()
+	clear_map_view()
 	paused = {"profile": profile, "snapshot": snapshot, "battle": battle, "screen": screen, "area_id": area_id, "node_id": node_id, "passed": passed.duplicate(), "claim": reward_claim, "reward": reward_result, "loot_state": loot_rng.state, "battle_state": battle_rng.state, "notice": notice}
 	page.hide()
 	editor = DefinitionEditor.new()
@@ -608,6 +660,9 @@ func start_test(settings: Dictionary, area_test: bool) -> void:
 	profile.base = settings.base.duplicate(true)
 	profile.deck = settings.deck.duplicate()
 	profile.hp = int(settings.hp)
+	profile.cleared = []
+	for id: String in settings.get("cleared", []):
+		HubActions.set_cleared(profile, id, true)
 	profile.consumables = {}
 	profile.loadout = []
 	for id: String in settings.get("consumables", []):
@@ -640,6 +695,7 @@ func return_editor() -> void:
 	is_test = false
 	clear_battle_view()
 	clear_hub_view()
+	clear_map_view()
 	battle = null
 	page.hide()
 	editor.show()

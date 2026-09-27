@@ -11,4 +11,6 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $Godot --headless --path $projectRoot --script res://tests/hub.gd
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $Godot --headless --path $projectRoot --script res://tests/items.gd
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $Godot --headless --path $projectRoot --script res://tests/map.gd
 exit $LASTEXITCODE

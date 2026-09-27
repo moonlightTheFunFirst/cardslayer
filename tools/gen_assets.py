@@ -14,6 +14,7 @@ from pixel import (OUTLINE, canvas, compose, dither_gradient, flat, glow, outlin
 
 from hub_art import hub_backgrounds
 from item_art import item_icons
+from map_art import map_assets
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 
@@ -456,6 +457,8 @@ def build():
         save(image, "backgrounds", name + ".png")
     for name, image in item_icons().items():
         save(image, "items", name + ".png")
+    for name, image in map_assets().items():
+        save(image, *(name + ".png").split("/"))
     for category in CARD_COLORS:
         save(card_frame(category), "cards", "frame_%s.png" % category)
         save(art("default", category), "cards", "art", "default_%s.png" % category)

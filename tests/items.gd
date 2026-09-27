@@ -222,7 +222,8 @@ func check_screens() -> void:
 	app.profile.hp = 10
 	app.depart()
 	await process_frame
-	await click(find_button(app, "薬草 を使う"))
+	check(app.map_view != null and app.map_view.item_buttons.size() == 1, "map shows the carried herb")
+	await click(app.map_view.item_buttons[0])
 	check(app.profile.hp > 10 and HubActions.owned(app.profile, "herb") == 0, "herb can be used from the map")
 
 	app.return_hub()

@@ -176,6 +176,15 @@ static func item_summary(results: Array) -> String:
 			"message": parts.append(str(result.text))
 	return "、".join(parts)
 
+# ---------------------------------------------------------------- areas
+
+## Marks an area first-cleared (the first-clear bonus is then not paid again) or not.
+static func set_cleared(profile: Dictionary, area_id: String, cleared: bool) -> void:
+	if cleared and area_id not in profile.cleared:
+		profile.cleared.append(area_id)
+	elif not cleared:
+		profile.cleared.erase(area_id)
+
 # ---------------------------------------------------------------- text
 
 static func stats_text(values: Dictionary) -> String:

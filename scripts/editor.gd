@@ -22,7 +22,7 @@ func setup(repo: DefinitionRepository) -> void:
 	repository = repo
 	draft = repo.data.duplicate(true)
 	var profile := Progression.new_player(draft)
-	test_settings = {"seed": 12345, "hp": 60, "base": profile.base, "deck": profile.deck, "enemies": [repo.records("enemies")[0].id], "equipment": [], "area": repo.records("areas")[0].id, "consumables": ItemRunner.settings(draft).starter.duplicate()}
+	test_settings = {"seed": 12345, "hp": 60, "base": profile.base, "deck": profile.deck, "enemies": [repo.records("enemies")[0].id], "equipment": [], "area": repo.records("areas")[0].id, "consumables": ItemRunner.settings(draft).starter.duplicate(), "cleared": []}
 	build()
 
 func label_at(parent: Node, value: String) -> Label:
@@ -153,6 +153,16 @@ func refresh() -> void:
 			for node: Dictionary in record.nodes:
 				label_at(detail, "%s → %s" % [node.id, ", ".join(node.next)])
 			button_at(detail, "このエリアを試遊対象に設定", func() -> void: test_settings.area = selected_id)
+			var cleared_toggle := CheckBox.new()
+			cleared_toggle.text = "テストプレイでクリア済みとして扱う"
+			cleared_toggle.button_pressed = selected_id in test_settings.cleared
+			var area_id := selected_id
+			cleared_toggle.toggled.connect(func(on: bool) -> void:
+				if on and area_id not in test_settings.cleared:
+					test_settings.cleared.append(area_id)
+				elif not on:
+					test_settings.cleared.erase(area_id))
+			detail.add_child(cleared_toggle)
 		if group == "consumables":
 			consumable_tools(record)
 		if group == "formulas":
@@ -210,6 +220,8 @@ func form(parent: Node, object: Dictionary, path: String) -> void:
 					if not value.has(stat):
 						value[stat] = 0
 			form(parent, value, path + "/" + key)
+		elif key == "cleared" and path == "test":
+			cleared_form(parent, value)
 		elif value is Array:
 			array_form(parent, value, key, path)
 		elif key == "script" and group == "consumables":
@@ -395,6 +407,7 @@ func launch_test(area_test: bool) -> void:
 	repository.check_refs(settings.enemies, repository.indexed("enemies"), "test/enemies", issues)
 	repository.check_refs(settings.equipment, repository.indexed("items"), "test/equipment", issues)
 	repository.check_refs(settings.get("consumables", []), repository.indexed("consumables"), "test/consumables", issues)
+	repository.check_refs(settings.get("cleared", []), repository.indexed("areas"), "test/cleared", issues)
 	var used_slots: Dictionary = {}
 	for id: String in settings.equipment:
 		if not repository.indexed("items").has(id):
@@ -503,3 +516,20 @@ func simulate_consumable(record: Dictionary) -> String:
 	var field := HubActions.use_field_item(hero, draft, record.id, field_rng)
 	lines.append("マップ（HP半分）: " + (HubActions.item_summary(field.results) if field.ok else "使用不可: " + field.reason))
 	return "\n".join(lines)
+
+## Test-play first-clear flags: one checkbox per area.
+func cleared_form(parent: Node, cleared: Array) -> void:
+	label_at(parent, "クリア済みエリア（テストプレイ用。初クリア報酬の有無に影響）")
+	var boxes := HFlowContainer.new()
+	parent.add_child(boxes)
+	for area: Dictionary in repository.records("areas", draft):
+		var id: String = area.id
+		var box := CheckBox.new()
+		box.text = "%s (%s)" % [area.name, id]
+		box.button_pressed = id in cleared
+		box.toggled.connect(func(on: bool) -> void:
+			if on and id not in cleared:
+				cleared.append(id)
+			elif not on:
+				cleared.erase(id))
+		boxes.add_child(box)
