@@ -18,6 +18,10 @@ var fault: String = ""
 var log: Array[String] = []
 var rng := RandomNumberGenerator.new()
 var busy: bool = false
+# Presentation-only record of what the last action did, in order. The battle
+# view replays it as animations; game logic never reads it.
+var events: Array[Dictionary] = []
+var effect_group: int = 0
 
 func setup(snapshot: Dictionary, stats: Dictionary, current_hp: int, deck_ids: Array, enemy_ids: Array, seed_value: int) -> void:
 	definitions = snapshot.duplicate(true)
@@ -56,10 +60,29 @@ func effective(who: Dictionary) -> Dictionary:
 	return result
 
 func draw(count: int) -> void:
+	var drawn: Array = []
 	for i: int in count:
 		if deck.is_empty() or hand.size() >= int(rules.hand_limit):
 			break
+		drawn.append(deck.front())
 		hand.append(deck.pop_front())
+	if not drawn.is_empty():
+		record("draw", {"ids": drawn})
+
+func record(kind: String, data: Dictionary = {}) -> void:
+	data["kind"] = kind
+	events.append(data)
+
+func actor_index(who: Dictionary) -> int:
+	if is_same(who, player):
+		return -1
+	for i: int in enemies.size():
+		if is_same(enemies[i], who):
+			return i
+	return -2
+
+func state_of(who: Dictionary) -> Dictionary:
+	return {"hp": who.hp, "max_hp": int(effective(who).max_hp), "block": who.block, "poison": who.poison, "buffs": who.buffs.duplicate(), "mp": who.mp}
 
 func needs_target(card: Dictionary) -> bool:
 	for effect: Dictionary in card.effects:
@@ -85,10 +108,12 @@ func play(index: int, target: int = -1) -> bool:
 	if not can_play(index, target).is_empty():
 		return false
 	busy = true
+	events.clear()
 	var card: Dictionary = cards[hand[index]]
 	ap -= int(card.ap)
 	player.mp -= int(card.mp)
 	resolving = hand.pop_at(index)
+	record("card", {"card": resolving, "index": index, "target": target, "ap": ap, "mp": player.mp})
 	log.append("%s / AP %d MP %d" % [card.name, card.ap, card.mp])
 	resolve(card.effects, player, target)
 	deck.append(resolving)
@@ -99,6 +124,7 @@ func play(index: int, target: int = -1) -> bool:
 
 func resolve(effects: Array, source: Dictionary, selected: int) -> void:
 	for effect: Dictionary in effects:
+		effect_group += 1
 		var targets: Array[Dictionary] = []
 		match effect.target:
 			"self": targets.append(source)
@@ -119,11 +145,12 @@ func resolve(effects: Array, source: Dictionary, selected: int) -> void:
 				log.append("数式エラー: " + fault)
 				return
 			var amount: int = int(evaluated.value)
+			var absorbed: int = 0
 			if not str(effect.get("formula_id", "")).is_empty():
 				log.append("式 %s inputs=%s → %d" % [effect.formula_id, str(evaluated.inputs), amount])
 			match effect.type:
 				"damage":
-					var absorbed := mini(int(target.block), amount)
+					absorbed = mini(int(target.block), amount)
 					target.block -= absorbed
 					target.hp = maxi(0, int(target.hp) - amount + absorbed)
 				"block": target.block += amount
@@ -135,6 +162,7 @@ func resolve(effects: Array, source: Dictionary, selected: int) -> void:
 				"apply_poison": target.poison += amount
 				"modify_stat": target.buffs[effect.stat] = target.buffs.get(effect.stat, 0) + amount
 			log.append("%s → %s %s %d" % [source.name, target.name, UiText.name_for(effect.type), amount])
+			record("effect", {"type": effect.type, "source": actor_index(source), "target": actor_index(target), "amount": amount, "absorbed": absorbed, "group": effect_group, "stat": str(effect.get("stat", "")), "magic": str(effect.get("formula_id", "")).contains("magic"), "state": state_of(target)})
 
 func effect_value(effect: Dictionary, source: Dictionary) -> Dictionary:
 	var inputs := effective(source)
@@ -152,15 +180,19 @@ func effect_value(effect: Dictionary, source: Dictionary) -> Dictionary:
 
 func begin_phase(who: Dictionary) -> void:
 	who.block = 0
+	var poisoned: int = int(who.poison)
 	if who.poison > 0:
 		log.append("%s 毒 %d" % [who.name, who.poison])
 		who.hp = maxi(0, int(who.hp) - int(who.poison))
 		who.poison -= 1
+	record("phase", {"target": actor_index(who), "poison": poisoned, "state": state_of(who)})
 
 func end_turn() -> void:
 	if busy or not outcome.is_empty() or not fault.is_empty():
 		return
 	busy = true
+	events.clear()
+	record("enemy_turn")
 	for enemy: Dictionary in enemies:
 		if enemy.hp <= 0:
 			continue
@@ -173,6 +205,7 @@ func end_turn() -> void:
 		var actions: Array = enemy.definition.actions
 		var action: Dictionary = actions[int(enemy.action) % actions.size()]
 		log.append(enemy.name + " / " + action.name)
+		record("act", {"source": actor_index(enemy), "name": action.name})
 		resolve(action.effects, enemy, -1)
 		enemy.action += 1
 		check_outcome()
@@ -185,6 +218,7 @@ func end_turn() -> void:
 			turn += 1
 			ap = int(rules.ap)
 			player.mp = mini(int(effective(player).max_mp), int(player.mp) + int(rules.mp_regen))
+			record("turn", {"turn": turn, "ap": ap, "mp": player.mp})
 			draw(int(rules.draw))
 			check_outcome()
 	busy = false

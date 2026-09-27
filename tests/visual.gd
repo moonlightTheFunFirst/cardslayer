@@ -11,6 +11,9 @@ func shot(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("res://.godot/tests/" + name + ".png")
 
+func wait(seconds: float) -> void:
+	await create_timer(seconds).timeout
+
 func run() -> void:
 	root.size = Vector2i(1280, 720)
 	app = load("res://scenes/main.tscn").instantiate()
@@ -26,7 +29,36 @@ func run() -> void:
 	app.start_battle(["thorn", "mossling"])
 	app.battle.draw(10)
 	app.show_screen("battle")
+	await wait(2.2)
 	await shot("battle")
+	var view: BattleView = app.battle_view
+	view.mouse = view.rest_center(3, view.cards.size())
+	view.on_motion()
+	await wait(0.4)
+	await shot("battle-hover")
+	var attack: int = -1
+	for i: int in view.cards.size():
+		if view.needs_target(i) and view.engine.can_play(i, 0).is_empty():
+			attack = i
+			break
+	view.pick(attack)
+	view.mouse = view.foes[0].position + view.foes[0].size / 2
+	view.on_motion()
+	await wait(0.4)
+	await shot("battle-aim")
+	view.cancel_held()
+	view.play_card(attack, 0)
+	await wait(0.3)
+	await shot("battle-hit")
+	await wait(1.5)
+	view.end_turn()
+	await wait(1.4)
+	await shot("battle-enemy-turn")
+	await wait(3.0)
+	app.node_id = "boss"
+	app.start_battle(["warden"])
+	await wait(2.2)
+	await shot("battle-boss")
 	app.open_editor()
 	await shot("editor")
 	for group: String in DefinitionRepository.GROUPS:
@@ -51,6 +83,7 @@ func run() -> void:
 	app.editor.detail_scroll.scroll_vertical = 0
 	await shot("generator-settings")
 	app.queue_free()
+	await create_timer(0.2).timeout  # let the audio server drop released playbacks
 	await process_frame
 	print("VISUAL SMOKE COMPLETE")
 	quit()

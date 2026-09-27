@@ -67,5 +67,6 @@ func run() -> void:
 	check(error_visible, "invalid conditions show a visible error dialog")
 	print("GENERATOR MOUSE UI: failures=", failures)
 	app.queue_free()
+	await create_timer(0.2).timeout  # let the audio server drop released playbacks
 	await process_frame
 	quit(0 if failures == 0 else 1)

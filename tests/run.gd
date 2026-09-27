@@ -250,6 +250,7 @@ func run() -> void:
 	retreat_dialog.confirmed.emit()
 	expect(main.screen == "hub" and main.area_id.is_empty(), "confirmed retreat discards expedition")
 	main.queue_free()
+	await create_timer(0.2).timeout  # let the audio server drop released playbacks
 	await process_frame
 	print("CHECKS: %d; FAILURES: %d" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)

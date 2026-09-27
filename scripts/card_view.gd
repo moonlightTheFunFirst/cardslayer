@@ -26,10 +26,9 @@ func configure(card: Dictionary, reason: String = "", highlighted: bool = false,
 	style.content_margin_right = 10
 	add_theme_stylebox_override("normal", style)
 	add_theme_font_size_override("font_size", 15)
-	var image_path: String = card.get("image_path", "")
-	if not image_path.is_empty() and ResourceLoader.exists(image_path):
-		var resource: Resource = load(image_path)
-		if resource is Texture2D:
-			icon = resource
-			expand_icon = true
-			add_theme_constant_override("icon_max_width", 48)
+	var art := BattleCard.art_texture(card)
+	if art != null:
+		icon = art
+		expand_icon = true
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_theme_constant_override("icon_max_width", 64)

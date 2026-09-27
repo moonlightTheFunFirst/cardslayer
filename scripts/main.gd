@@ -13,8 +13,9 @@ var reward_claim: Dictionary = {}
 var reward_result: Dictionary = {}
 var loot_rng := RandomNumberGenerator.new()
 var battle_rng := RandomNumberGenerator.new()
-var selected_card: int = -1
 var page: VBoxContainer
+var battle_view: BattleView
+var sound := Sound.new()
 var editor: DefinitionEditor
 var is_test: bool = false
 var paused: Dictionary = {}
@@ -24,6 +25,9 @@ var notice: String = ""
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
+	# Let clicks on empty space fall through to the battle view's unhandled input.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(sound)
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Yu Gothic", "Meiryo", "sans-serif"])
 	var app_theme := Theme.new()
@@ -73,10 +77,19 @@ func confirm_quit() -> void:
 	confirm("終了しますか？戦闘途中とマップ位置は再開できません。次回は回復済みの拠点からです。", func() -> void: get_tree().quit())
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed):
-		if screen == "battle" and selected_card >= 0:
-			selected_card = -1
-			show_screen("battle")
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		editor_shortcut()
+		get_viewport().set_input_as_handled()
+
+## F1 / battle-screen button: jump straight to the editor. From a test play
+## this returns to the edited item; from normal play it pauses the session.
+func editor_shortcut() -> void:
+	if not ProjectSettings.get_setting("cardslayer/development_enabled", true):
+		return
+	if is_test:
+		return_editor()
+	elif not is_instance_valid(editor):
+		open_editor()
 
 func label(value: String, parent: Node = null, size: int = 18) -> Label:
 	var result := Label.new()
@@ -117,6 +130,11 @@ func show_screen(next: String) -> void:
 	for child: Node in page.get_children():
 		page.remove_child(child)
 		child.queue_free()
+	if next != "battle":
+		clear_battle_view()
+	# The battle view covers the whole window; the form pages live in the margin.
+	(page.get_parent() as Control).visible = next != "battle"
+	update_music()
 	if not notice.is_empty():
 		label(notice)
 	if is_test:
@@ -293,51 +311,64 @@ func start_battle(enemy_ids: Array) -> void:
 	battle.setup(snapshot, Progression.stats(profile, snapshot), int(profile.hp), profile.deck, enemy_ids, battle_rng.randi())
 	reward_claim = {}
 	reward_result = {}
-	selected_card = -1
 	show_screen("battle")
 
 func battle_screen() -> void:
-	label("戦闘 / ターン %d / 山札 %d枚" % [battle.turn, battle.deck.size()], page, 25)
-	var enemy_row := row()
-	for i: int in battle.enemies.size():
-		var enemy: Dictionary = battle.enemies[i]
-		var text := "%s\nHP %d / %d  ブロック %d  毒 %d\n%s" % [enemy.name, enemy.hp, battle.effective(enemy).max_hp, enemy.block, enemy.poison, battle.intent(enemy)]
-		var target := button(text, func() -> void:
-			if selected_card >= 0:
-				use_card(selected_card, i), enemy_row, enemy.hp <= 0)
-		target.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		target.custom_minimum_size.y = 110
-	label("英雄 HP %d / %d   MP %d / %d   AP %d   ブロック %d   毒 %d   強化 %s" % [battle.player.hp, battle.effective(battle.player).max_hp, battle.player.mp, battle.effective(battle.player).max_mp, battle.ap, battle.player.block, battle.player.poison, UiText.bonuses(battle.player.buffs)])
-	var controls := row()
-	button("ターン終了", func() -> void: battle.end_turn(); after_action(), controls, not battle.outcome.is_empty() or not battle.fault.is_empty())
-	button("選択解除（右クリック / Esc）", func() -> void: selected_card = -1; show_screen("battle"), controls)
-	if selected_card >= 0 and not battle.needs_target(battle.cards[battle.hand[selected_card]]):
-		button("選択カードを使用", func() -> void: use_card(selected_card, -1), controls)
-	button("撤退", retreat, controls)
-	if not is_test and ProjectSettings.get_setting("cardslayer/development_enabled", true):
-		button("開発メニュー", open_editor, controls)
-	if not battle.fault.is_empty():
-		label("停止: " + battle.fault)
-	var log_view := RichTextLabel.new()
-	log_view.custom_minimum_size.y = 70
-	log_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	log_view.text = "\n".join(battle.log.slice(maxi(0, battle.log.size() - 30)))
-	log_view.scroll_following = true
-	page.add_child(log_view)
-	label("カードをクリック → 単体対象は敵をクリック。自己／全体対象は「選択カードを使用」。")
-	var hand_scroll := ScrollContainer.new()
-	hand_scroll.custom_minimum_size.y = 220
-	page.add_child(hand_scroll)
-	var hand_row := row(hand_scroll)
-	for i: int in battle.hand.size():
-		var card := CardView.new()
-		card.configure(battle.cards[battle.hand[i]], battle.can_play(i, -1, false), selected_card == i, battle)
-		card.pressed.connect(func() -> void: selected_card = i; show_screen("battle"))
-		hand_row.add_child(card)
+	if battle_view != null and battle_view.engine == battle:
+		battle_view.sync()
+		return
+	clear_battle_view()
+	battle_view = BattleView.new()
+	add_child(battle_view)
+	battle_view.setup(battle, sound, {
+		"area": repository.indexed("areas", snapshot)[area_id].name if not area_id.is_empty() else "",
+		"node": node_id,
+		"boss": boss_battle(),
+		"test": is_test,
+		"seed": str(test_config.get("seed", "")) if is_test else "",
+		"dev": ProjectSettings.get_setting("cardslayer/development_enabled", true),
+		"notice": notice,
+	})
+	battle_view.action_finished.connect(after_action)
+	battle_view.editor_requested.connect(editor_shortcut)
+	battle_view.retreat_requested.connect(retreat)
+	battle_view.retry_requested.connect(func(new_seed: bool) -> void:
+		if new_seed:
+			test_config.seed = randi()
+		start_test(test_config, test_area))
 
+func clear_battle_view() -> void:
+	if battle_view != null:
+		remove_child(battle_view)
+		battle_view.queue_free()
+		battle_view = null
+
+## Boss node of the current area, or (in a battle test) any enemy that guards an area boss node.
+func boss_battle() -> bool:
+	if battle == null:
+		return false
+	var areas: Dictionary = repository.indexed("areas", snapshot)
+	if not area_id.is_empty():
+		return node_id == areas[area_id].boss
+	for area: Dictionary in areas.values():
+		for node: Dictionary in area.nodes:
+			if node.id == area.boss:
+				for enemy: Dictionary in battle.enemies:
+					if enemy.id in node.enemies:
+						return true
+	return false
+
+func update_music() -> void:
+	if is_instance_valid(editor) and editor.visible:
+		sound.play_bgm("")
+	elif screen == "battle":
+		sound.play_bgm("boss" if boss_battle() else "battle")
+	else:
+		sound.play_bgm("hub")
+
+## Direct (non-animated) play used by automated checks.
 func use_card(index: int, target: int) -> void:
-	if battle.play(index, target):
-		selected_card = -1
+	battle.play(index, target)
 	after_action()
 
 func after_action() -> void:
@@ -389,6 +420,7 @@ func confirm(text: String, action: Callable) -> void:
 	dialog.popup_centered()
 
 func open_editor() -> void:
+	clear_battle_view()
 	paused = {"profile": profile, "snapshot": snapshot, "battle": battle, "screen": screen, "area_id": area_id, "node_id": node_id, "passed": passed.duplicate(), "claim": reward_claim, "reward": reward_result, "loot_state": loot_rng.state, "battle_state": battle_rng.state, "notice": notice}
 	page.hide()
 	editor = DefinitionEditor.new()
@@ -401,6 +433,7 @@ func open_editor() -> void:
 	editor.setup(repository)
 	editor.exit_requested.connect(close_editor)
 	editor.test_requested.connect(start_test)
+	update_music()
 
 func close_editor() -> void:
 	editor.queue_free()
@@ -408,7 +441,6 @@ func close_editor() -> void:
 	profile = paused.profile
 	snapshot = paused.snapshot
 	battle = paused.battle
-	selected_card = -1
 	area_id = paused.area_id
 	node_id = paused.node_id
 	passed.assign(paused.passed)
@@ -458,7 +490,9 @@ func start_test(settings: Dictionary, area_test: bool) -> void:
 
 func return_editor() -> void:
 	is_test = false
+	clear_battle_view()
 	battle = null
 	page.hide()
 	editor.show()
+	update_music()
 	editor.detail_scroll.scroll_vertical = editor.saved_scroll
